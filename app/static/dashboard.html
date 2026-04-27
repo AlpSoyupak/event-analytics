@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Event Analytics Platform</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    body { background: #0f1117; color: #e2e8f0; font-family: 'Segoe UI', sans-serif; }
+    .navbar { background: #1a1d2e !important; border-bottom: 1px solid #2d3148; }
+    .navbar-brand { font-weight: 700; color: #7c3aed !important; font-size: 1.1rem; }
+    .card {
+      background: #1a1d2e;
+      border: 1px solid #2d3148;
+      border-radius: 12px;
+    }
+    .card-header {
+      background: #20243a;
+      border-bottom: 1px solid #2d3148;
+      font-weight: 600;
+      font-size: 0.85rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      border-radius: 12px 12px 0 0 !important;
+    }
+    .step-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; border-radius: 50%;
+      background: #7c3aed; color: white; font-size: 0.8rem; font-weight: 700;
+      margin-right: 10px; flex-shrink: 0;
+    }
+    .form-control, .form-select {
+      background: #0f1117; border: 1px solid #2d3148; color: #e2e8f0;
+      border-radius: 8px;
+    }
+    .form-control:focus, .form-select:focus {
+      background: #0f1117; color: #e2e8f0;
+      border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124,58,237,0.2);
+    }
+    .form-control::placeholder { color: #475569; }
+    .btn-primary { background: #7c3aed; border-color: #7c3aed; border-radius: 8px; }
+    .btn-primary:hover { background: #6d28d9; border-color: #6d28d9; }
+    .btn-outline-secondary { border-color: #2d3148; color: #94a3b8; border-radius: 8px; }
+    .btn-outline-secondary:hover { background: #2d3148; color: #e2e8f0; }
+    .api-key-box {
+      background: #0f1117; border: 1px solid #7c3aed;
+      border-radius: 8px; padding: 12px 16px;
+      font-family: monospace; font-size: 0.85rem; color: #a78bfa;
+      word-break: break-all;
+    }
+    .stat-card {
+      background: #20243a; border-radius: 10px; padding: 20px;
+      text-align: center;
+    }
+    .stat-value { font-size: 2rem; font-weight: 700; color: #a78bfa; line-height: 1; }
+    .stat-label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+    .event-log {
+      background: #0f1117; border-radius: 8px; padding: 12px;
+      font-family: monospace; font-size: 0.78rem; color: #4ade80;
+      max-height: 160px; overflow-y: auto;
+    }
+    .event-log .line { margin-bottom: 2px; }
+    .event-log .ts { color: #475569; }
+    .badge-plan { font-size: 0.7rem; padding: 3px 8px; border-radius: 20px; }
+    .status-dot {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px;
+    }
+    .status-ok { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
+    .status-err { background: #f87171; box-shadow: 0 0 6px #f87171; }
+    .status-loading { background: #fbbf24; }
+    .funnel-bar { height: 28px; background: #7c3aed; border-radius: 6px; transition: width 0.5s; min-width: 4px; }
+    .funnel-row { margin-bottom: 10px; }
+    .flow-arrow {
+      display: flex; flex-direction: column; gap: 8px; font-size: 0.8rem; color: #64748b;
+    }
+    .flow-step {
+      display: flex; align-items: center; gap: 10px;
+      background: #20243a; border-radius: 8px; padding: 10px 14px;
+    }
+    .flow-connector { text-align: center; color: #475569; font-size: 1rem; }
+    .tag { display: inline-block; background: #2d3148; border-radius: 4px; padding: 1px 6px; font-size: 0.72rem; color: #94a3b8; margin: 1px; }
+    .section-title { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #475569; margin-bottom: 8px; }
+    select option { background: #1a1d2e; color: #e2e8f0; }
+    .table { color: #e2e8f0; }
+    .table td, .table th { border-color: #2d3148; }
+    .table tbody tr:hover { background: #20243a; }
+    .progress { background: #2d3148; height: 6px; border-radius: 3px; }
+    .progress-bar { background: #7c3aed; }
+    #chart-container { position: relative; height: 220px; }
+    .alert-info { background: #1e3a5f; border-color: #2563eb; color: #93c5fd; border-radius: 8px; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg">
+  <div class="container-fluid px-4">
+    <span class="navbar-brand">⚡ Event Analytics Platform</span>
+    <div class="d-flex align-items-center gap-3 ms-auto">
+      <span id="nav-status" class="small">
+        <span class="status-dot status-loading"></span>checking...
+      </span>
+      <a href="/docs" target="_blank" class="btn btn-sm btn-outline-secondary">Swagger UI</a>
+      <a href="http://localhost:5555" target="_blank" class="btn btn-sm btn-outline-secondary">Flower</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid px-4 py-4" style="max-width:1300px">
+
+  <!-- System flow explainer -->
+  <div class="alert alert-info mb-4 p-3">
+    <strong>How data flows through this system:</strong>
+    <span class="mx-2">→</span>
+    <span class="tag">You send events via HTTP</span>
+    <span class="mx-1">→</span>
+    <span class="tag">FastAPI validates + writes to PostgreSQL</span>
+    <span class="mx-1">→</span>
+    <span class="tag">Published to Kafka topic</span>
+    <span class="mx-1">→</span>
+    <span class="tag">Celery refreshes materialized views every 5 min</span>
+    <span class="mx-1">→</span>
+    <span class="tag">Analytics cached in Redis</span>
+    <span class="mx-1">→</span>
+    <span class="tag">You query analytics here</span>
+  </div>
+
+  <div class="row g-4">
+
+    <!-- LEFT COLUMN: Setup + Send Events -->
+    <div class="col-lg-4">
+
+      <!-- Step 1: Tenant -->
+      <div class="card mb-4">
+        <div class="card-header d-flex align-items-center">
+          <span class="step-badge">1</span> Create a Tenant
+        </div>
+        <div class="card-body">
+          <p class="text-secondary small mb-3">
+            A <strong>tenant</strong> is an isolated workspace. Every event belongs to exactly one tenant.
+            Think of it as your "account". You'll get an <strong>API key</strong> used for every request.
+          </p>
+          <div class="mb-2">
+            <input id="tenant-name" type="text" class="form-control form-control-sm" placeholder="Company name (e.g. Acme Corp)" />
+          </div>
+          <div class="mb-3">
+            <select id="tenant-plan" class="form-select form-select-sm">
+              <option value="free">Free — 100 req/min, 10K events/day</option>
+              <option value="starter">Starter — 500 req/min, 100K events/day</option>
+              <option value="pro" selected>Pro — 2K req/min, 1M events/day</option>
+              <option value="enterprise">Enterprise — 10K req/min, unlimited</option>
+            </select>
+          </div>
+          <button id="btn-create-tenant" class="btn btn-primary btn-sm w-100" onclick="createTenant()">Create Tenant</button>
+
+          <div id="tenant-result" class="mt-3" style="display:none">
+            <div class="section-title">Your API Key (save this!)</div>
+            <div class="api-key-box" id="api-key-display"></div>
+            <div class="mt-2 small text-secondary">
+              Tenant ID: <code id="tenant-id-display" class="text-secondary"></code>
+            </div>
+            <div class="mt-1">
+              Plan: <span id="tenant-plan-display" class="badge badge-plan bg-purple text-white"></span>
+              <span class="ms-2 small text-secondary">Rate limit: <span id="tenant-rl"></span>/min</span>
+            </div>
+          </div>
+          <div id="saved-tenant-info" class="mt-3" style="display:none">
+            <div class="section-title">Active Tenant</div>
+            <div class="api-key-box" id="saved-key-display"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Send Events -->
+      <div class="card mb-4">
+        <div class="card-header d-flex align-items-center">
+          <span class="step-badge">2</span> Send Events
+        </div>
+        <div class="card-body">
+          <p class="text-secondary small mb-3">
+            Events are the raw data. Each event has a <strong>type</strong> (what happened),
+            optional <strong>user_id</strong> (who), and a <strong>properties</strong> object (extra data).
+          </p>
+          <div class="mb-2">
+            <label class="section-title">Event Type</label>
+            <select id="event-type" class="form-select form-select-sm">
+              <option>page_view</option>
+              <option>button_click</option>
+              <option>signup</option>
+              <option>login</option>
+              <option>purchase</option>
+              <option>add_to_cart</option>
+              <option>checkout</option>
+              <option>search</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="section-title">User ID (optional)</label>
+            <input id="event-user" type="text" class="form-control form-control-sm" placeholder="user_abc123" />
+          </div>
+          <div class="mb-3">
+            <label class="section-title">Properties (JSON)</label>
+            <textarea id="event-props" class="form-control form-control-sm" rows="3" style="font-family:monospace;font-size:0.78rem">{"page": "/home", "value": 29.99}</textarea>
+          </div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary btn-sm flex-fill" onclick="sendEvent()">Send 1 Event</button>
+            <button class="btn btn-outline-secondary btn-sm flex-fill" onclick="sendBatch()">Send 50 (batch)</button>
+          </div>
+
+          <div class="mt-3">
+            <div class="section-title">Activity Log</div>
+            <div class="event-log" id="event-log">
+              <div class="line" style="color:#475569">Waiting for events...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN: Analytics -->
+    <div class="col-lg-8">
+
+      <!-- Step 3: Analytics -->
+      <div class="card mb-4">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <div><span class="step-badge">3</span> Analytics Dashboard</div>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadAnalytics()">↻ Refresh</button>
+        </div>
+        <div class="card-body">
+
+          <!-- Time range picker -->
+          <div class="d-flex gap-2 mb-4 flex-wrap">
+            <button class="btn btn-sm btn-outline-secondary active" onclick="setRange(1, this)">24h</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="setRange(7, this)">7d</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="setRange(30, this)">30d</button>
+            <select id="granularity" class="form-select form-select-sm" style="width:auto" onchange="loadTimeseries()">
+              <option value="hour">Hourly</option>
+              <option value="day" selected>Daily</option>
+            </select>
+          </div>
+
+          <!-- Summary stat cards -->
+          <div class="row g-3 mb-4">
+            <div class="col-4">
+              <div class="stat-card">
+                <div class="stat-value" id="stat-total">—</div>
+                <div class="stat-label">Total Events</div>
+              </div>
+            </div>
+            <div class="col-4">
+              <div class="stat-card">
+                <div class="stat-value" id="stat-users">—</div>
+                <div class="stat-label">Unique Users</div>
+              </div>
+            </div>
+            <div class="col-4">
+              <div class="stat-card">
+                <div class="stat-value" id="stat-sessions">—</div>
+                <div class="stat-label">Sessions</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Time series chart -->
+          <div class="mb-4">
+            <div class="section-title">Event Volume Over Time
+              <span class="ms-2 small" style="color:#475569;text-transform:none;letter-spacing:0">
+                (Uses materialized view for daily — pre-aggregated by Celery)
+              </span>
+            </div>
+            <div id="chart-container">
+              <canvas id="timeseries-chart"></canvas>
+            </div>
+          </div>
+
+          <!-- Top events + Funnel side by side -->
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="section-title">Top Event Types</div>
+              <div id="top-events-table">
+                <div class="text-secondary small">No data yet</div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="section-title">Conversion Funnel</div>
+              <div class="mb-2 d-flex gap-1 flex-wrap">
+                <span class="small text-secondary">Steps:</span>
+                <span class="tag" id="f1" onclick="toggleFunnelStep(this)" style="cursor:pointer">page_view ✓</span>
+                <span class="tag" id="f2" onclick="toggleFunnelStep(this)" style="cursor:pointer;opacity:0.4">add_to_cart</span>
+                <span class="tag" id="f3" onclick="toggleFunnelStep(this)" style="cursor:pointer;opacity:0.4">purchase</span>
+              </div>
+              <button class="btn btn-sm btn-outline-secondary mb-3" onclick="loadFunnel()">Run Funnel</button>
+              <div id="funnel-display">
+                <div class="text-secondary small">Click "Run Funnel" after sending events</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- System health -->
+      <div class="card">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <div>System Health</div>
+          <button class="btn btn-sm btn-outline-secondary" onclick="checkHealth()">↻ Check</button>
+        </div>
+        <div class="card-body">
+          <div class="row g-3" id="health-checks">
+            <div class="col-auto text-secondary small">Loading...</div>
+          </div>
+
+          <div class="mt-3">
+            <div class="section-title">Architecture — What's Running</div>
+            <div class="flow-arrow">
+              <div class="flow-step">
+                <span style="font-size:1.2rem">🌐</span>
+                <div>
+                  <strong>FastAPI API</strong> <span class="tag">port 8000</span>
+                  <div class="small text-secondary mt-1">Validates requests, enforces rate limits via Redis, writes to PostgreSQL, publishes to Kafka</div>
+                </div>
+              </div>
+              <div class="flow-connector">↓</div>
+              <div class="flow-step">
+                <span style="font-size:1.2rem">🗄️</span>
+                <div>
+                  <strong>PostgreSQL</strong> <span class="tag">port 5432</span>
+                  <div class="small text-secondary mt-1">Source of truth. Composite indexes on (tenant_id, received_at). BRIN index for time scans. GIN index for JSONB. Materialized views for fast aggregations.</div>
+                </div>
+              </div>
+              <div class="flow-connector">↓ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ↓</div>
+              <div class="row g-2">
+                <div class="col-6">
+                  <div class="flow-step">
+                    <span style="font-size:1.2rem">⚡</span>
+                    <div>
+                      <strong>Redis</strong> <span class="tag">port 6379</span>
+                      <div class="small text-secondary mt-1">Rate-limit sliding windows. Analytics cache (TTL 60–300s). Daily quota counters.</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="flow-step">
+                    <span style="font-size:1.2rem">📨</span>
+                    <div>
+                      <strong>Kafka</strong> <span class="tag">port 29092</span>
+                      <div class="small text-secondary mt-1">Event stream. External producers send here. Consumer batch-inserts into PostgreSQL.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="flow-connector">↓</div>
+              <div class="flow-step">
+                <span style="font-size:1.2rem">⚙️</span>
+                <div>
+                  <strong>Celery Worker + Beat</strong> <span class="tag">Flower: port 5555</span>
+                  <div class="small text-secondary mt-1">Beat scheduler triggers REFRESH MATERIALIZED VIEW CONCURRENTLY every 5 min. Nightly cleanup deletes events past 90-day retention window.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────────
+  let API_KEY = localStorage.getItem('ea_api_key') || '';
+  let rangeDays = 1;
+  let tsChart = null;
+  let funnelSteps = new Set(['page_view']);
+
+  const BASE = '';  // same origin
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function headers() {
+    return { 'Content-Type': 'application/json', 'X-API-Key': API_KEY };
+  }
+
+  function log(msg, ok = true) {
+    const box = document.getElementById('event-log');
+    const now = new Date().toLocaleTimeString();
+    const line = document.createElement('div');
+    line.className = 'line';
+    line.innerHTML = `<span class="ts">[${now}]</span> <span style="color:${ok ? '#4ade80' : '#f87171'}">${msg}</span>`;
+    if (box.querySelector('.line')?.style.color === '' && box.querySelector('.line')?.textContent.startsWith('Waiting')) {
+      box.innerHTML = '';
+    }
+    box.prepend(line);
+  }
+
+  function fmt(n) {
+    if (n === undefined || n === null) return '—';
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+    if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+    return String(n);
+  }
+
+  function dateRange() {
+    const end = new Date();
+    const start = new Date(end - rangeDays * 86_400_000);
+    return { start: start.toISOString(), end: end.toISOString() };
+  }
+
+  // ── Tenant ────────────────────────────────────────────────────────────────
+  async function createTenant() {
+    const name = document.getElementById('tenant-name').value.trim();
+    const plan = document.getElementById('tenant-plan').value;
+    if (!name) { alert('Enter a company name first.'); return; }
+
+    const btn = document.getElementById('btn-create-tenant');
+    btn.disabled = true; btn.textContent = 'Creating…';
+
+    try {
+      const r = await fetch(`${BASE}/api/v1/tenants`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, plan })
+      });
+      if (!r.ok) throw new Error(await r.text());
+      const t = await r.json();
+
+      API_KEY = t.api_key;
+      localStorage.setItem('ea_api_key', API_KEY);
+      localStorage.setItem('ea_tenant_id', t.id);
+
+      document.getElementById('api-key-display').textContent = t.api_key;
+      document.getElementById('tenant-id-display').textContent = t.id;
+      document.getElementById('tenant-plan-display').textContent = t.plan;
+      document.getElementById('tenant-rl').textContent = t.rate_limit_per_minute;
+      document.getElementById('tenant-result').style.display = '';
+      document.getElementById('saved-tenant-info').style.display = 'none';
+      log(`Tenant "${t.name}" created. API key saved.`);
+    } catch (e) {
+      alert('Error: ' + e.message);
+      log('Tenant creation failed: ' + e.message, false);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Create Tenant';
+    }
+  }
+
+  // Show saved key on load
+  if (API_KEY) {
+    const info = document.getElementById('saved-tenant-info');
+    document.getElementById('saved-key-display').textContent = API_KEY;
+    info.style.display = '';
+  }
+
+  // ── Send Events ───────────────────────────────────────────────────────────
+  async function sendEvent() {
+    if (!API_KEY) { alert('Create a tenant first (Step 1).'); return; }
+
+    const type = document.getElementById('event-type').value;
+    const user = document.getElementById('event-user').value.trim() || undefined;
+    let props = {};
+    try { props = JSON.parse(document.getElementById('event-props').value); } catch {}
+
+    const payload = { event_type: type, properties: props };
+    if (user) payload.user_id = user;
+
+    try {
+      const r = await fetch(`${BASE}/api/v1/events`, {
+        method: 'POST', headers: headers(), body: JSON.stringify(payload)
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(JSON.stringify(data));
+      log(`✓ ${type} → event_id ${data.event_id.slice(0, 8)}…`);
+    } catch (e) {
+      log(`✗ ${e.message}`, false);
+    }
+  }
+
+  async function sendBatch() {
+    if (!API_KEY) { alert('Create a tenant first (Step 1).'); return; }
+
+    const types = ['page_view','button_click','add_to_cart','purchase','signup','login','search'];
+    const pages = ['/home','/pricing','/docs','/signup','/checkout'];
+    const users = Array.from({length: 10}, (_, i) => `user_${i.toString().padStart(3,'0')}`);
+    const events = Array.from({length: 50}, () => ({
+      event_type: types[Math.floor(Math.random() * types.length)],
+      user_id: users[Math.floor(Math.random() * users.length)],
+      session_id: 'sess_' + Math.random().toString(36).slice(2, 10),
+      properties: { page: pages[Math.floor(Math.random() * pages.length)], value: Math.round(Math.random() * 500 * 100) / 100 }
+    }));
+
+    try {
+      const r = await fetch(`${BASE}/api/v1/events/batch`, {
+        method: 'POST', headers: headers(), body: JSON.stringify({ events })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(JSON.stringify(data));
+      log(`✓ Batch: ${data.accepted} events accepted`);
+      setTimeout(loadAnalytics, 500);
+    } catch (e) {
+      log(`✗ Batch failed: ${e.message}`, false);
+    }
+  }
+
+  // ── Analytics ─────────────────────────────────────────────────────────────
+  function setRange(days, btn) {
+    rangeDays = days;
+    document.querySelectorAll('.btn[onclick^="setRange"]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadAnalytics();
+  }
+
+  async function loadAnalytics() {
+    if (!API_KEY) return;
+    await Promise.all([loadSummary(), loadTimeseries(), loadTopEvents()]);
+  }
+
+  async function loadSummary() {
+    const { start, end } = dateRange();
+    try {
+      const r = await fetch(`${BASE}/api/v1/analytics/summary?start=${start}&end=${end}`, { headers: headers() });
+      if (!r.ok) return;
+      const d = await r.json();
+      document.getElementById('stat-total').textContent = fmt(d.total_events);
+      document.getElementById('stat-users').textContent = fmt(d.unique_users);
+      document.getElementById('stat-sessions').textContent = fmt(d.unique_sessions);
+    } catch {}
+  }
+
+  async function loadTimeseries() {
+    if (!API_KEY) return;
+    const { start, end } = dateRange();
+    const gran = document.getElementById('granularity').value;
+    try {
+      const r = await fetch(`${BASE}/api/v1/analytics/timeseries?start=${start}&end=${end}&granularity=${gran}`, { headers: headers() });
+      if (!r.ok) return;
+      const data = await r.json();
+
+      const labels = data.map(p => {
+        const d = new Date(p.timestamp);
+        return gran === 'hour'
+          ? d.toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})
+          : d.toLocaleDateString([], {month:'short', day:'numeric'});
+      });
+      const events = data.map(p => p.event_count);
+      const users  = data.map(p => p.unique_users);
+
+      if (tsChart) tsChart.destroy();
+      const ctx = document.getElementById('timeseries-chart').getContext('2d');
+      tsChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Events',
+              data: events,
+              backgroundColor: 'rgba(124,58,237,0.7)',
+              borderRadius: 4,
+              order: 2,
+            },
+            {
+              label: 'Unique Users',
+              data: users,
+              type: 'line',
+              borderColor: '#4ade80',
+              backgroundColor: 'rgba(74,222,128,0.1)',
+              borderWidth: 2,
+              pointRadius: 3,
+              tension: 0.3,
+              fill: true,
+              order: 1,
+            }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
+          scales: {
+            x: { ticks: { color: '#64748b', maxRotation: 30, font: { size: 10 } }, grid: { color: '#2d3148' } },
+            y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#2d3148' }, beginAtZero: true }
+          }
+        }
+      });
+    } catch {}
+  }
+
+  async function loadTopEvents() {
+    const { start, end } = dateRange();
+    try {
+      const r = await fetch(`${BASE}/api/v1/analytics/top-events?start=${start}&end=${end}&limit=8`, { headers: headers() });
+      if (!r.ok) return;
+      const data = await r.json();
+
+      const max = data[0]?.count || 1;
+      const html = data.map(e => `
+        <div class="mb-2">
+          <div class="d-flex justify-content-between mb-1">
+            <span class="small">${e.event_type}</span>
+            <span class="small text-secondary">${fmt(e.count)} events · ${fmt(e.unique_users)} users</span>
+          </div>
+          <div class="progress">
+            <div class="progress-bar" style="width:${Math.round(e.count / max * 100)}%"></div>
+          </div>
+        </div>
+      `).join('');
+      document.getElementById('top-events-table').innerHTML = html || '<div class="text-secondary small">No data</div>';
+    } catch {}
+  }
+
+  // ── Funnel ────────────────────────────────────────────────────────────────
+  function toggleFunnelStep(el) {
+    const step = el.textContent.replace(' ✓', '').trim();
+    if (funnelSteps.has(step)) {
+      if (funnelSteps.size <= 1) return;
+      funnelSteps.delete(step);
+      el.textContent = step;
+      el.style.opacity = '0.4';
+    } else {
+      funnelSteps.add(step);
+      el.textContent = step + ' ✓';
+      el.style.opacity = '1';
+    }
+  }
+
+  async function loadFunnel() {
+    if (!API_KEY) { alert('Create a tenant first.'); return; }
+    const { start, end } = dateRange();
+    const steps = Array.from(funnelSteps);
+    const params = steps.map(s => `steps=${encodeURIComponent(s)}`).join('&');
+    try {
+      const r = await fetch(`${BASE}/api/v1/analytics/funnel?${params}&start=${start}&end=${end}`, { headers: headers() });
+      const data = await r.json();
+      if (!r.ok) { document.getElementById('funnel-display').innerHTML = `<div class="text-danger small">${JSON.stringify(data)}</div>`; return; }
+
+      const maxCount = data.steps[0]?.count || 1;
+      const html = data.steps.map((s, i) => `
+        <div class="funnel-row">
+          <div class="d-flex justify-content-between mb-1">
+            <span class="small">${s.event_type}</span>
+            <span class="small text-secondary">${fmt(s.count)}${i > 0 ? ` (${s.conversion_rate}%)` : ''}</span>
+          </div>
+          <div style="background:#2d3148;border-radius:6px;height:28px;overflow:hidden">
+            <div class="funnel-bar" style="width:${Math.round(s.count / maxCount * 100)}%;height:100%"></div>
+          </div>
+        </div>
+      `).join('');
+      document.getElementById('funnel-display').innerHTML = html +
+        `<div class="mt-2 small text-secondary">Overall conversion: <strong style="color:#a78bfa">${data.overall_conversion}%</strong>
+         &nbsp;(${fmt(data.total_entered)} → ${fmt(data.total_completed)})</div>`;
+    } catch (e) {
+      document.getElementById('funnel-display').innerHTML = `<div class="text-danger small">${e.message}</div>`;
+    }
+  }
+
+  // ── Health ────────────────────────────────────────────────────────────────
+  async function checkHealth() {
+    try {
+      const [hRes, rRes] = await Promise.all([
+        fetch(`${BASE}/health`),
+        fetch(`${BASE}/ready`)
+      ]);
+      const ready = await rRes.json();
+      const statusOk = rRes.ok;
+
+      document.getElementById('nav-status').innerHTML =
+        `<span class="status-dot ${statusOk ? 'status-ok' : 'status-err'}"></span>${statusOk ? 'All systems healthy' : 'Degraded'}`;
+
+      const checks = ready.checks || {};
+      document.getElementById('health-checks').innerHTML = Object.entries(checks).map(([svc, status]) => `
+        <div class="col-auto">
+          <div class="stat-card" style="padding:12px 16px">
+            <span class="status-dot ${status === 'ok' ? 'status-ok' : 'status-err'}"></span>
+            <strong>${svc}</strong>
+            <span class="ms-2 small ${status === 'ok' ? 'text-success' : 'text-danger'}">${status}</span>
+          </div>
+        </div>
+      `).join('');
+    } catch {
+      document.getElementById('nav-status').innerHTML =
+        `<span class="status-dot status-err"></span>API unreachable`;
+    }
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  checkHealth();
+  setInterval(checkHealth, 15_000);
+  if (API_KEY) loadAnalytics();
+</script>
+</body>
+</html>
