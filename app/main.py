@@ -12,6 +12,7 @@ from app.middleware.logging import RequestLoggingMiddleware
 from app.routers import ai, analytics, events, tenants
 from app.services.cache_service import cache_service
 from app.services.event_service import close_kafka_producer, get_kafka_producer
+from app.services.rag_service import rag_service
 
 settings = get_settings()
 logger = structlog.get_logger()
@@ -30,6 +31,8 @@ structlog.configure(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("startup", environment=settings.environment)
+    chunk_count = rag_service.build_index("app")
+    logger.info("rag_index_built", chunks=chunk_count)
     try:
         await get_kafka_producer()
     except Exception:

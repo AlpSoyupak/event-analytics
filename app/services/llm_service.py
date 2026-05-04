@@ -42,5 +42,24 @@ class LLMService:
         )
         return response.choices[0].message.content or ""
 
+    async def chat_json(
+        self,
+        messages: list[dict],
+        max_tokens: int = 512,
+    ) -> dict:
+        """Like chat() but forces JSON output via response_format. Always returns a dict."""
+        import json
+
+        response = await self._get_client().chat.completions.create(
+            model=settings.groq_model,
+            messages=messages,
+            response_format={"type": "json_object"},
+            max_tokens=max_tokens,
+        )
+        try:
+            return json.loads(response.choices[0].message.content or "{}")
+        except json.JSONDecodeError:
+            return {}
+
 
 llm_service = LLMService()

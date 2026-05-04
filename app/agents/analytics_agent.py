@@ -202,18 +202,23 @@ class AnalyticsAgent:
         except Exception as exc:
             return json.dumps({"error": str(exc)})
 
-    async def run(self, question: str) -> str:
+    async def run(self, question: str) -> tuple[str, list[str]]:
+        """Run the agentic tool loop.
+
+        Returns (answer, tools_used) so callers can inspect which tools fired.
+        """
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         messages: list[dict] = [
             {"role": "system", "content": SYSTEM_PROMPT.format(today=today)},
             {"role": "user", "content": question},
         ]
+        tools_used: list[str] = []
 
         for _ in range(MAX_ROUNDS):
             response = await llm_service.chat_with_tools(messages, TOOLS)
 
             if not response.tool_calls:
-                return response.content or ""
+                return response.content or "", tools_used
 
             # Append the assistant turn (must include tool_calls for the API)
             messages.append({
@@ -234,6 +239,7 @@ class AnalyticsAgent:
 
             # Execute every tool call and feed results back
             for tc in response.tool_calls:
+                tools_used.append(tc.function.name)
                 args = json.loads(tc.function.arguments)
                 tool_result = await self._execute_tool(tc.function.name, args)
                 messages.append({
@@ -247,4 +253,4 @@ class AnalyticsAgent:
             "role": "user",
             "content": "Please provide your final answer based on the data retrieved so far.",
         })
-        return await llm_service.chat(messages)
+        return await llm_service.chat(messages), tools_used

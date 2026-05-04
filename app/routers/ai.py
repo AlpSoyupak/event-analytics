@@ -1,19 +1,24 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.analytics_agent import AnalyticsAgent
+from app.agents.orchestrator import OrchestratorAgent
+from app.agents.planner_agent import planner_agent
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies.rate_limit import require_tenant
 from app.models.tenant import Tenant
 from app.services.analytics_service import analytics_service
+from app.services.cache_service import cache_service
 from app.services.llm_service import llm_service
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 settings = get_settings()
+
+_PLAN_TTL = 300  # seconds a pending plan stays valid in Redis
 
 
 class AskRequest(BaseModel):
@@ -28,6 +33,10 @@ def _require_groq_key() -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# POST /ai/ask  —  fast path (no human review)
+# ---------------------------------------------------------------------------
+
 @router.post("/ask")
 async def ask(
     body: AskRequest,
@@ -37,19 +46,94 @@ async def ask(
     """
     Ask a natural-language question about your event data.
 
-    The agent will autonomously decide which analytics queries to run,
-    chain them together, and return a synthesised answer.
+    Runs the full multi-agent pipeline automatically:
+    **Planner** (RAG-aware) → **Analyst** (tool loop) → **Critic** (review & revise).
 
-    Example questions:
-    - "What were the top events last month?"
-    - "Show me the signup → purchase conversion rate for the past 30 days."
-    - "Did page views drop at any point in the last two weeks?"
+    Use `/ai/plan` + `/ai/execute/{plan_id}` if you want to review the query plan
+    before it runs (Human-in-the-Loop flow).
     """
     _require_groq_key()
-    agent = AnalyticsAgent(tenant_id=tenant.id, db=db)
-    answer = await agent.run(body.question)
-    return {"answer": answer}
+    orchestrator = OrchestratorAgent(tenant_id=tenant.id, db=db)
+    return await orchestrator.run(body.question)
 
+
+# ---------------------------------------------------------------------------
+# HITL Phase 1 — POST /ai/plan
+# ---------------------------------------------------------------------------
+
+@router.post("/plan")
+async def create_plan(
+    body: AskRequest,
+    tenant: Tenant = Depends(require_tenant),
+):
+    """
+    **HITL Phase 1** — Generate a query plan without executing it.
+
+    The planner uses RAG to retrieve relevant project context (models, service code)
+    before deciding which analytics tools to call and in what order.
+
+    Returns a `plan_id` and the full plan for human review.
+    Call `POST /ai/execute/{plan_id}` to approve and run it.
+    The plan expires after 5 minutes.
+    """
+    _require_groq_key()
+    plan = await planner_agent.plan(body.question)
+    plan_id = str(uuid.uuid4())
+
+    await cache_service.set(
+        f"ai:plan:{plan_id}",
+        {"question": body.question, "plan": plan, "tenant_id": str(tenant.id)},
+        ttl=_PLAN_TTL,
+    )
+
+    return {
+        "plan_id": plan_id,
+        "expires_in_seconds": _PLAN_TTL,
+        "question": body.question,
+        "plan": plan,
+        "next_step": f"POST /api/v1/ai/execute/{plan_id}",
+    }
+
+
+# ---------------------------------------------------------------------------
+# HITL Phase 2 — POST /ai/execute/{plan_id}
+# ---------------------------------------------------------------------------
+
+@router.post("/execute/{plan_id}")
+async def execute_plan(
+    plan_id: str,
+    tenant: Tenant = Depends(require_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    **HITL Phase 2** — Execute a previously reviewed plan.
+
+    Retrieves the plan created by `POST /ai/plan`, runs the analyst tool loop,
+    then passes the draft answer through the critic for review and correction.
+
+    The plan is deleted from Redis after execution (single-use).
+    Returns 404 if the plan has expired or already been executed.
+    """
+    _require_groq_key()
+    stored = await cache_service.get(f"ai:plan:{plan_id}")
+    if not stored:
+        raise HTTPException(status_code=404, detail="Plan not found or expired.")
+
+    if stored.get("tenant_id") != str(tenant.id):
+        raise HTTPException(status_code=403, detail="Plan belongs to a different tenant.")
+
+    await cache_service.delete(f"ai:plan:{plan_id}")
+
+    orchestrator = OrchestratorAgent(tenant_id=tenant.id, db=db)
+    return await orchestrator.run_with_plan(
+        question=stored["question"],
+        plan=stored["plan"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /ai/report  —  automated weekly narrative
+# ---------------------------------------------------------------------------
 
 @router.get("/report")
 async def weekly_report(
@@ -59,34 +143,26 @@ async def weekly_report(
     """
     Generate a plain-English weekly analytics report for the last 7 days.
 
-    Fetches summary, top events, and daily timeseries data, then asks the LLM
-    to write a concise narrative with trends and one actionable recommendation.
+    Fetches summary, top events, and daily timeseries, then asks the LLM to write
+    a concise narrative with trends and one actionable recommendation.
     """
     _require_groq_key()
     now = datetime.now(timezone.utc)
     week_ago = now - timedelta(days=7)
 
-    summary, top_events, timeseries = (
-        await analytics_service.get_summary(tenant.id, week_ago, now, db),
-        await analytics_service.get_top_events(tenant.id, week_ago, now, 5, db),
-        await analytics_service.get_timeseries(tenant.id, week_ago, now, "day", db),
+    summary = await analytics_service.get_summary(tenant.id, week_ago, now, db)
+    top_events = await analytics_service.get_top_events(tenant.id, week_ago, now, 5, db)
+    timeseries = await analytics_service.get_timeseries(tenant.id, week_ago, now, "day", db)
+
+    prompt = (
+        "Generate a concise weekly analytics report (4-6 sentences) for a product team.\n"
+        "Highlight the most important trends, note anything unusual, and end with one\n"
+        "specific, actionable recommendation.\n\n"
+        f"SUMMARY (last 7 days):\n{summary}\n\n"
+        f"TOP 5 EVENTS:\n{top_events}\n\n"
+        f"DAILY EVENT COUNTS:\n{timeseries}\n\n"
+        "Write in plain English. Be specific with numbers. Do not use bullet points."
     )
-
-    prompt = f"""\
-Generate a concise weekly analytics report (4-6 sentences) for a product team.
-Highlight the most important trends, note anything unusual, and end with one
-specific, actionable recommendation.
-
-SUMMARY (last 7 days):
-{summary}
-
-TOP 5 EVENTS:
-{top_events}
-
-DAILY EVENT COUNTS:
-{timeseries}
-
-Write in plain English. Be specific with numbers. Do not use bullet points."""
 
     report = await llm_service.chat(
         messages=[
