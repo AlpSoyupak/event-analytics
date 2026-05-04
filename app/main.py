@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import get_settings
 from app.database import engine
 from app.middleware.logging import RequestLoggingMiddleware
-from app.routers import analytics, events, tenants
+from app.routers import ai, analytics, events, tenants
 from app.services.cache_service import cache_service
 from app.services.event_service import close_kafka_producer, get_kafka_producer
 
@@ -66,6 +66,7 @@ app.add_middleware(RequestLoggingMiddleware)
 app.include_router(events.router, prefix="/api/v1")
 app.include_router(analytics.router, prefix="/api/v1")
 app.include_router(tenants.router, prefix="/api/v1")
+app.include_router(ai.router, prefix="/api/v1")
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
