@@ -2,6 +2,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.langchain_analytics_agent import LangChainAnalyticsAgent
 from app.workflows.analytics_workflow import analytics_workflow
 
 
@@ -11,6 +12,10 @@ class OrchestratorAgent:
     The workflow handles the planner → analyst → critic sequence with per-step
     timing traces. The orchestrator's only job is to supply the initial context
     and format the WorkflowResult for the HTTP response.
+
+    If the critic rejects the analyst's draft (critic_approved=False), the
+    orchestrator automatically retries with the LangChain agent as a fallback.
+    The response includes a 'fallback_agent' key when this occurs.
 
     Two entry points:
     - run()            full pipeline (plan + analyse + critique)
@@ -27,7 +32,7 @@ class OrchestratorAgent:
             "tenant_id": self.tenant_id,
             "db": self.db,
         })
-        return self._format(result)
+        return await self._format_with_fallback(question, result)
 
     async def run_with_plan(self, question: str, plan: dict) -> dict:
         result = await analytics_workflow.run({
@@ -36,7 +41,24 @@ class OrchestratorAgent:
             "tenant_id": self.tenant_id,
             "db": self.db,
         })
-        return self._format(result)
+        return await self._format_with_fallback(question, result)
+
+    async def _format_with_fallback(self, question: str, result) -> dict:
+        formatted = self._format(result)
+        if not formatted["meta"]["critic_approved"]:
+            lc_answer, lc_tools = await self._try_langchain(question)
+            if lc_answer:
+                formatted["answer"] = lc_answer
+                formatted["meta"]["tools_used"] = lc_tools
+                formatted["meta"]["fallback_agent"] = "langchain"
+        return formatted
+
+    async def _try_langchain(self, question: str) -> tuple[str, list[str]]:
+        try:
+            agent = LangChainAnalyticsAgent(tenant_id=self.tenant_id, db=self.db)
+            return await agent.run(question)
+        except Exception:
+            return "", []
 
     @staticmethod
     def _format(result) -> dict:

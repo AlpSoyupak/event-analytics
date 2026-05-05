@@ -5,6 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.langchain_analytics_agent import LangChainAnalyticsAgent
 from app.agents.orchestrator import OrchestratorAgent
 from app.agents.planner_agent import planner_agent
 from app.config import get_settings
@@ -15,6 +16,7 @@ from app.models.tenant import Tenant
 from app.services.analytics_service import analytics_service
 from app.services.cache_service import cache_service
 from app.services.llm_service import llm_service
+from app.services.vector_rag_service import vector_rag_service
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 settings = get_settings()
@@ -237,3 +239,48 @@ async def weekly_report(
             "top_events": top_events,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# POST /ai/langchain/ask  —  LangChain tool-calling agent
+# ---------------------------------------------------------------------------
+
+@router.post("/langchain/ask")
+async def langchain_ask(
+    body: AskRequest,
+    tenant: Tenant = Depends(require_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Ask a question using the **LangChain-powered** analytics agent.
+
+    Uses `ChatGroq` from `langchain-groq` and five `StructuredTool` wrappers
+    around the same analytics_service functions, orchestrated by LangChain's
+    `AgentExecutor` (LCEL under the hood) instead of the raw Groq SDK.
+
+    Returns the same `answer` + `meta.tools_used` shape as `/ai/ask`.
+    """
+    _require_groq_key()
+    agent = LangChainAnalyticsAgent(tenant_id=tenant.id, db=db)
+    answer, tools_used = await agent.run(body.question)
+    return {"answer": answer, "meta": {"tools_used": tools_used, "agent": "langchain"}}
+
+
+# ---------------------------------------------------------------------------
+# POST /ai/langchain/index  —  build FAISS semantic vector index
+# ---------------------------------------------------------------------------
+
+@router.post("/langchain/index")
+async def build_vector_index():
+    """
+    Build (or rebuild) the **FAISS semantic vector index** over project source files.
+
+    Chunks every `.py` file by function/class boundaries, embeds each chunk with
+    `sentence-transformers/all-MiniLM-L6-v2` (~90 MB, downloaded on first call),
+    and stores the index in memory for the lifetime of the process.
+
+    Once built, the index can be queried programmatically via `vector_rag_service.retrieve()`.
+    Re-call after code changes to keep the index current.
+    """
+    count = vector_rag_service.build_index()
+    return {"indexed_chunks": count, "embedding_model": "all-MiniLM-L6-v2"}
