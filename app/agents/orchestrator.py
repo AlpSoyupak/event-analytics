@@ -2,21 +2,19 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.analytics_agent import AnalyticsAgent
-from app.agents.critic_agent import critic_agent
-from app.agents.planner_agent import planner_agent
+from app.workflows.analytics_workflow import analytics_workflow
 
 
 class OrchestratorAgent:
-    """Coordinates three specialised agents in sequence:
+    """Thin coordinator that runs the analytics workflow and shapes its output.
 
-    1. PlannerAgent  — decides which analytics tools are needed (uses RAG for context)
-    2. AnalystAgent  — executes the agentic tool loop against the real DB
-    3. CriticAgent   — reviews the draft answer and corrects it if needed
+    The workflow handles the planner → analyst → critic sequence with per-step
+    timing traces. The orchestrator's only job is to supply the initial context
+    and format the WorkflowResult for the HTTP response.
 
-    The HITL flow splits this into two HTTP calls:
-      Phase 1 (POST /ai/plan)           → runs planner only, returns plan for human review
-      Phase 2 (POST /ai/execute/{id})   → runs analyst + critic with the approved plan
+    Two entry points:
+    - run()            full pipeline (plan + analyse + critique)
+    - run_with_plan()  HITL phase 2 — plan already approved, skip PlanStep
     """
 
     def __init__(self, tenant_id: uuid.UUID, db: AsyncSession) -> None:
@@ -24,25 +22,34 @@ class OrchestratorAgent:
         self.db = db
 
     async def run(self, question: str) -> dict:
-        """Full pipeline: plan → analyse → critique. No human review step."""
-        plan = await planner_agent.plan(question)
-        return await self._execute(question, plan)
+        result = await analytics_workflow.run({
+            "question": question,
+            "tenant_id": self.tenant_id,
+            "db": self.db,
+        })
+        return self._format(result)
 
     async def run_with_plan(self, question: str, plan: dict) -> dict:
-        """HITL phase 2: skip planning (already done), run analyst + critic."""
-        return await self._execute(question, plan)
+        result = await analytics_workflow.run({
+            "question": question,
+            "plan": plan,          # PlanStep detects this and skips
+            "tenant_id": self.tenant_id,
+            "db": self.db,
+        })
+        return self._format(result)
 
-    async def _execute(self, question: str, plan: dict) -> dict:
-        analyst = AnalyticsAgent(tenant_id=self.tenant_id, db=self.db)
-        draft_answer, tools_used = await analyst.run(question)
-        critique = await critic_agent.critique(question, draft_answer, tools_used)
-
+    @staticmethod
+    def _format(result) -> dict:
+        ctx = result.output
+        critique = ctx.get("critique", {})
         return {
-            "answer": critique.get("final_answer", draft_answer),
-            "plan": plan,
+            "answer": critique.get("final_answer", ctx.get("draft_answer", "")),
+            "plan": ctx.get("plan", {}),
             "meta": {
-                "tools_used": tools_used,
+                "tools_used": ctx.get("tools_used", []),
                 "critic_approved": critique.get("approved", True),
                 "critic_issues": critique.get("issues", []),
+                "workflow_trace": result.as_trace_dicts(),
+                "total_duration_ms": round(result.total_duration_ms, 1),
             },
         }

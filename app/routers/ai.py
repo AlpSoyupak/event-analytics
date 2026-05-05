@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +10,7 @@ from app.agents.planner_agent import planner_agent
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies.rate_limit import require_tenant
+from app.evaluation.runner import eval_runner
 from app.models.tenant import Tenant
 from app.services.analytics_service import analytics_service
 from app.services.cache_service import cache_service
@@ -129,6 +130,56 @@ async def execute_plan(
         question=stored["question"],
         plan=stored["plan"],
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /ai/eval/run  —  trigger evaluation pipeline
+# ---------------------------------------------------------------------------
+
+@router.post("/eval/run")
+async def run_evaluation(
+    background_tasks: BackgroundTasks,
+    tenant: Tenant = Depends(require_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Trigger the agent evaluation pipeline against your live event data.
+
+    Runs all 5 predefined test cases through the agent, then scores each
+    answer using an LLM judge (LLM-as-judge pattern).
+
+    **Synchronous** — runs in the request for immediate results.
+    To schedule nightly runs via Celery, dispatch `run_agent_evaluation.delay(tenant_id)`.
+
+    Returns overall score (0–1) and per-case breakdowns.
+    """
+    _require_groq_key()
+    report = await eval_runner.run(tenant_id=tenant.id, db=db)
+    return report
+
+
+# ---------------------------------------------------------------------------
+# GET /ai/eval/results  —  fetch latest stored results
+# ---------------------------------------------------------------------------
+
+@router.get("/eval/results")
+async def get_eval_results(
+    tenant: Tenant = Depends(require_tenant),
+):
+    """
+    Fetch the most recent evaluation report for this tenant.
+
+    Results are stored in Redis after each `POST /ai/eval/run` call
+    (or after a Celery `run_agent_evaluation` task completes).
+    Returns 404 if no evaluation has been run yet.
+    """
+    report = await cache_service.get(f"ai:eval:latest:{tenant.id}")
+    if not report:
+        raise HTTPException(
+            status_code=404,
+            detail="No evaluation results found. Run POST /api/v1/ai/eval/run first.",
+        )
+    return report
 
 
 # ---------------------------------------------------------------------------

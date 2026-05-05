@@ -1,5 +1,7 @@
+import asyncio
 import json
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from celery import shared_task
@@ -78,6 +80,42 @@ def precompute_tenant_analytics(self, tenant_id: str, start: str, end: str):
         return {"tenant_id": tenant_id, "days": len(rows)}
     except Exception as exc:
         logger.exception("precompute_tenant_analytics failed")
+        raise self.retry(exc=exc)
+
+
+@shared_task(bind=True, max_retries=1, default_retry_delay=60, queue="analytics")
+def run_agent_evaluation(self, tenant_id: str):
+    """Run the full LLM evaluation suite against a tenant's live data.
+
+    Uses asyncio.run() to bridge Celery's sync context with the async agent
+    and analytics service layers. Results are stored in Redis and retrievable
+    via GET /api/v1/ai/eval/results.
+
+    Schedule nightly via beat_schedule (add to celery_app.py):
+        "nightly-agent-eval": {
+            "task": "app.workers.tasks.run_agent_evaluation",
+            "schedule": crontab(hour=3, minute=0),
+            "args": [tenant_id],
+        }
+    """
+    from app.database import async_session_factory
+    from app.evaluation.runner import eval_runner
+
+    async def _run() -> dict:
+        async with async_session_factory() as db:
+            return await eval_runner.run(uuid.UUID(tenant_id), db)
+
+    try:
+        report = asyncio.run(_run())
+        logger.info(
+            "agent_eval_complete",
+            tenant_id=tenant_id,
+            overall_score=report.get("overall_score"),
+            cases_run=report.get("cases_run"),
+        )
+        return {"status": "ok", "overall_score": report["overall_score"]}
+    except Exception as exc:
+        logger.exception("run_agent_evaluation failed", tenant_id=tenant_id)
         raise self.retry(exc=exc)
 
 

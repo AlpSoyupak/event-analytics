@@ -25,6 +25,7 @@ celery_app.conf.update(
         "app.workers.tasks.refresh_materialized_views": {"queue": "maintenance"},
         "app.workers.tasks.cleanup_old_events": {"queue": "maintenance"},
         "app.workers.tasks.precompute_tenant_analytics": {"queue": "analytics"},
+        "app.workers.tasks.run_agent_evaluation": {"queue": "analytics"},
     },
     beat_schedule={
         "refresh-views-every-5-minutes": {
