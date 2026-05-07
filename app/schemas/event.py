@@ -12,6 +12,10 @@ class EventCreate(BaseModel):
     source: str = Field("api", max_length=100)
     properties: dict[str, Any] = Field(default_factory=dict)
     meta: dict[str, Any] = Field(default_factory=dict)
+    received_at: datetime | None = Field(
+        None,
+        description="Override ingestion timestamp (e.g. for backfill). Defaults to server time.",
+    )
 
 
 class EventBatchCreate(BaseModel):
@@ -42,3 +46,14 @@ class EventIngestResponse(BaseModel):
 class BatchIngestResponse(BaseModel):
     accepted: int
     status: str = "accepted"
+
+
+class ReplayRequest(BaseModel):
+    start: datetime
+    end: datetime
+    event_type: str | None = Field(None, description="Filter by event type. Omit to replay all types.")
+
+
+class ReplayJobResponse(BaseModel):
+    job_id: str
+    status: str = "queued"

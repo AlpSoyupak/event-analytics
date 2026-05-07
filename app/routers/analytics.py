@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
@@ -8,6 +9,7 @@ from app.database import get_db
 from app.dependencies.rate_limit import require_tenant
 from app.models.tenant import Tenant
 from app.services.analytics_service import analytics_service
+from app.services.cache_service import cache_service
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -66,6 +68,15 @@ async def get_funnel(
 ):
     """Sequential funnel analysis — tracks users through each step in order."""
     return await analytics_service.get_funnel(tenant.id, steps, start, end, db)
+
+
+@router.get("/anomalies")
+async def get_anomalies(tenant: Tenant = Depends(require_tenant)):
+    """Return current anomaly alerts detected by the Celery worker (refreshed every 5 min)."""
+    r = await cache_service.client()
+    raw = await r.get(f"anomalies:{tenant.id}")
+    anomalies = json.loads(raw) if raw else []
+    return {"anomalies": anomalies, "checked_at": datetime.now(timezone.utc).isoformat()}
 
 
 @router.get("/retention")

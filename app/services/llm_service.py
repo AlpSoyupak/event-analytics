@@ -19,8 +19,7 @@ class LLMService:
         messages: list[dict],
         tools: list[dict],
         max_tokens: int = 1024,
-    ) 
-    :
+    ):
         response = await self._get_client().chat.completions.create(
             model=settings.groq_model,
             messages=messages,

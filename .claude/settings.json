@@ -12,7 +12,17 @@
       "Bash(gh auth *)",
       "Bash(ssh -T git@github.com)",
       "Bash(python -c ' *)",
-      "Bash(python3 -c \"import ast; ast.parse\\(open\\('app/agents/orchestrator.py'\\).read\\(\\)\\); print\\('OK'\\)\")"
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('app/agents/orchestrator.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(pip index *)",
+      "Bash(make build *)",
+      "Bash(docker-compose logs *)",
+      "Bash(docker-compose up *)",
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/tenants/948f3b03-9206-4fb8-aa3a-4c2c4a9d1fb1/rotate-key)",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s http://localhost:8000/ready)",
+      "Bash(python3 -m app.seed)",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/tenants/1197b35e-e072-4303-9b9d-a9b3f94bfb59/rotate-key)"
     ]
   }
 }

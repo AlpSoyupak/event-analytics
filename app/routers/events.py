@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies.rate_limit import require_tenant
 from app.models.tenant import Tenant
-from app.schemas.event import BatchIngestResponse, EventBatchCreate, EventCreate, EventIngestResponse, EventResponse
+from app.schemas.event import BatchIngestResponse, EventBatchCreate, EventCreate, EventIngestResponse, EventResponse, ReplayJobResponse, ReplayRequest
 from app.services.cache_service import cache_service
 from app.services.event_service import event_service
 
@@ -39,6 +39,36 @@ async def ingest_batch(
 
     events = await event_service.ingest_batch(tenant, payload.events, db)
     return BatchIngestResponse(accepted=len(events))
+
+
+@router.post("/replay", response_model=ReplayJobResponse, status_code=202)
+async def start_replay(
+    payload: ReplayRequest,
+    tenant: Tenant = Depends(require_tenant),
+):
+    """Submit an async job to re-publish historical events to Kafka (max 10 000 events)."""
+    from app.workers.tasks import replay_events
+
+    job = replay_events.delay(
+        str(tenant.id),
+        payload.start.isoformat(),
+        payload.end.isoformat(),
+        payload.event_type,
+    )
+    return ReplayJobResponse(job_id=job.id)
+
+
+@router.get("/replay/{job_id}")
+async def get_replay_status(job_id: str, tenant: Tenant = Depends(require_tenant)):
+    """Poll the status of a replay job."""
+    from app.workers.celery_app import celery_app
+
+    result = celery_app.AsyncResult(job_id)
+    return {
+        "job_id": job_id,
+        "status": result.status,
+        "result": result.result if result.ready() else None,
+    }
 
 
 @router.get("", response_model=list[EventResponse])

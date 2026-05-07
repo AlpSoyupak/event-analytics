@@ -19,7 +19,7 @@ services:
 
   celery_worker:
     build: .
-    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=4 -Q default,analytics,maintenance
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=4 -Q default,analytics,maintenance,replay
     env_file: .env
     volumes:
       - .:/app

@@ -90,6 +90,19 @@
     .progress-bar { background: #7c3aed; }
     #chart-container { position: relative; height: 220px; }
     .alert-info { background: #1e3a5f; border-color: #2563eb; color: #93c5fd; border-radius: 8px; }
+    .live-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#4ade80; box-shadow:0 0 6px #4ade80; animation: pulse 1.5s infinite; }
+    .live-dot.offline { background:#f87171; box-shadow:0 0 6px #f87171; animation:none; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .live-feed { background:#0f1117; border-radius:8px; padding:12px; font-family:monospace; font-size:0.75rem; max-height:180px; overflow-y:auto; }
+    .live-feed .ev { padding:2px 0; border-bottom:1px solid #1a1d2e; }
+    .live-feed .ev-type { color:#a78bfa; font-weight:600; }
+    .live-feed .ev-meta { color:#475569; }
+    .anomaly-badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:0.7rem; font-weight:600; }
+    .anomaly-spike { background:rgba(251,146,60,0.15); color:#fb923c; border:1px solid rgba(251,146,60,0.3); }
+    .anomaly-drop  { background:rgba(248,113,113,0.15); color:#f87171; border:1px solid rgba(248,113,113,0.3); }
+    .anomaly-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #2d3148; font-size:0.82rem; }
+    .anomaly-row:last-child { border-bottom:none; }
+    .replay-result { background:#0f1117; border-radius:8px; padding:10px 14px; font-family:monospace; font-size:0.8rem; color:#4ade80; margin-top:10px; display:none; }
   </style>
 </head>
 <body>
@@ -124,6 +137,10 @@
     <span class="tag">Analytics cached in Redis</span>
     <span class="mx-1">→</span>
     <span class="tag">You query analytics here</span>
+    <span class="mx-1">·</span>
+    <span class="tag" style="color:#fb923c">Celery detects anomalies every 5 min</span>
+    <span class="mx-1">·</span>
+    <span class="tag" style="color:#4ade80">WebSocket streams events live</span>
   </div>
 
   <div class="row g-4">
@@ -217,6 +234,56 @@
         </div>
       </div>
 
+      <!-- Live Event Stream -->
+      <div class="card mb-4">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <div><span class="live-dot offline" id="ws-dot"></span> Live Event Stream</div>
+          <span id="ws-status" class="small text-secondary">disconnected</span>
+        </div>
+        <div class="card-body">
+          <p class="text-secondary small mb-3">
+            Events arrive here in <strong>real time</strong> via WebSocket — no polling.
+            Any event your tenant sends (from any client) appears instantly.
+          </p>
+          <div class="live-feed" id="live-feed">
+            <div style="color:#475569">Waiting for connection...</div>
+          </div>
+          <div class="mt-2 d-flex justify-content-between align-items-center">
+            <span id="live-count" class="small text-secondary">0 events received</span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="clearLiveFeed()">Clear</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Replay Events -->
+      <div class="card mb-4">
+        <div class="card-header d-flex align-items-center">
+          <span class="step-badge" style="background:#059669">↺</span> Replay Events
+        </div>
+        <div class="card-body">
+          <p class="text-secondary small mb-3">
+            Re-publish historical events into the Kafka pipeline — demonstrates
+            <strong>event sourcing</strong> and Kafka's log retention model.
+          </p>
+          <div class="row g-2 mb-2">
+            <div class="col-6">
+              <label class="section-title">Start</label>
+              <input id="replay-start" type="datetime-local" class="form-control form-control-sm" />
+            </div>
+            <div class="col-6">
+              <label class="section-title">End</label>
+              <input id="replay-end" type="datetime-local" class="form-control form-control-sm" />
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="section-title">Event Type (optional)</label>
+            <input id="replay-type" type="text" class="form-control form-control-sm" placeholder="Leave blank to replay all types" />
+          </div>
+          <button class="btn btn-primary btn-sm w-100" onclick="startReplay()">Start Replay Job</button>
+          <div class="replay-result" id="replay-result"></div>
+        </div>
+      </div>
+
     </div>
 
     <!-- RIGHT COLUMN: Analytics -->
@@ -226,7 +293,10 @@
       <div class="card mb-4">
         <div class="card-header d-flex align-items-center justify-content-between">
           <div><span class="step-badge">3</span> Analytics Dashboard</div>
-          <button class="btn btn-sm btn-outline-secondary" onclick="loadAnalytics()">↻ Refresh</button>
+          <div class="d-flex align-items-center gap-2">
+            <span id="refresh-countdown" class="small text-secondary">next refresh in 60s</span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="loadAnalytics(); resetCountdown()">↻ Refresh</button>
+          </div>
         </div>
         <div class="card-body">
 
@@ -298,6 +368,19 @@
             </div>
           </div>
 
+        </div>
+      </div>
+
+      <!-- Anomaly Alerts -->
+      <div class="card mb-4">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <div>Anomaly Alerts <span class="ms-2 small" style="color:#475569;text-transform:none;letter-spacing:0">(Z-score &gt; 2.5, refreshed every 5 min by Celery)</span></div>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadAnomalies()">↻ Check</button>
+        </div>
+        <div class="card-body">
+          <div id="anomaly-display">
+            <div class="text-secondary small">Load analytics to trigger anomaly detection.</div>
+          </div>
         </div>
       </div>
 
@@ -436,6 +519,11 @@
       document.getElementById('tenant-result').style.display = '';
       document.getElementById('saved-tenant-info').style.display = 'none';
       log(`Tenant "${t.name}" created. API key saved.`);
+      connectWebSocket();
+      loadAnomalies();
+      const now = new Date();
+      document.getElementById('replay-end').value = now.toISOString().slice(0, 16);
+      document.getElementById('replay-start').value = new Date(now - 86_400_000).toISOString().slice(0, 16);
     } catch (e) {
       alert('Error: ' + e.message);
       log('Tenant creation failed: ' + e.message, false);
@@ -681,10 +769,161 @@
     }
   }
 
+  // ── WebSocket Live Stream ─────────────────────────────────────────────────
+  let ws = null;
+  let liveCount = 0;
+
+  function connectWebSocket() {
+    if (!API_KEY || ws) return;
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${location.host}/api/v1/ws/events?api_key=${API_KEY}`);
+
+    ws.onopen = () => {
+      document.getElementById('ws-dot').classList.remove('offline');
+      document.getElementById('ws-status').textContent = 'connected';
+    };
+
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.type === 'connected' || data.type === 'heartbeat') return;
+      liveCount++;
+      document.getElementById('live-count').textContent = `${liveCount} events received`;
+      const feed = document.getElementById('live-feed');
+      if (feed.querySelector('div')?.style.color === 'rgb(71, 85, 105)') feed.innerHTML = '';
+      const el = document.createElement('div');
+      el.className = 'ev';
+      const ts = new Date().toLocaleTimeString();
+      el.innerHTML = `<span class="ev-meta">[${ts}]</span> <span class="ev-type">${data.event_type}</span>`
+        + (data.user_id ? ` <span class="ev-meta">· ${data.user_id}</span>` : '')
+        + (data.source === 'replay' ? ` <span class="anomaly-badge anomaly-drop">replay</span>` : '');
+      feed.prepend(el);
+      if (feed.children.length > 50) feed.removeChild(feed.lastChild);
+    };
+
+    ws.onclose = () => {
+      document.getElementById('ws-dot').classList.add('offline');
+      document.getElementById('ws-status').textContent = 'disconnected';
+      ws = null;
+      // Reconnect after 3s
+      setTimeout(connectWebSocket, 3000);
+    };
+
+    ws.onerror = () => ws.close();
+  }
+
+  function clearLiveFeed() {
+    document.getElementById('live-feed').innerHTML = '<div style="color:#475569">Feed cleared.</div>';
+    liveCount = 0;
+    document.getElementById('live-count').textContent = '0 events received';
+  }
+
+  // ── Anomaly Alerts ────────────────────────────────────────────────────────
+  async function loadAnomalies() {
+    if (!API_KEY) return;
+    try {
+      const r = await fetch(`${BASE}/api/v1/analytics/anomalies`, { headers: headers() });
+      if (!r.ok) return;
+      const data = await r.json();
+      const box = document.getElementById('anomaly-display');
+      if (!data.anomalies.length) {
+        box.innerHTML = '<div class="text-secondary small">No anomalies detected in the last hour.</div>';
+        return;
+      }
+      box.innerHTML = data.anomalies.map(a => `
+        <div class="anomaly-row">
+          <span class="anomaly-badge ${a.kind === 'spike' ? 'anomaly-spike' : 'anomaly-drop'}">${a.kind}</span>
+          <span>${a.description}</span>
+          <span class="ms-auto ev-meta small">z=${a.z_score}</span>
+        </div>
+      `).join('');
+    } catch {}
+  }
+
+  // ── Replay ────────────────────────────────────────────────────────────────
+  async function startReplay() {
+    if (!API_KEY) { alert('Create a tenant first.'); return; }
+    const start = document.getElementById('replay-start').value;
+    const end   = document.getElementById('replay-end').value;
+    if (!start || !end) { alert('Select a start and end date.'); return; }
+
+    const body = { start: new Date(start).toISOString(), end: new Date(end).toISOString() };
+    const eventType = document.getElementById('replay-type').value.trim();
+    if (eventType) body.event_type = eventType;
+
+    const result = document.getElementById('replay-result');
+    result.style.display = '';
+    result.textContent = 'Submitting replay job…';
+
+    try {
+      const r = await fetch(`${BASE}/api/v1/events/replay`, {
+        method: 'POST', headers: headers(), body: JSON.stringify(body)
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(JSON.stringify(data));
+      result.textContent = `Job queued: ${data.job_id}\nPolling for result…`;
+      pollReplay(data.job_id, result);
+    } catch (e) {
+      result.style.color = '#f87171';
+      result.textContent = 'Error: ' + e.message;
+    }
+  }
+
+  async function pollReplay(jobId, el) {
+    for (let i = 0; i < 30; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        const r = await fetch(`${BASE}/api/v1/events/replay/${jobId}`, { headers: headers() });
+        const data = await r.json();
+        if (data.status === 'SUCCESS') {
+          el.style.color = '#4ade80';
+          el.textContent = `Done! Replayed ${data.result.replayed} events to Kafka.\nJob: ${jobId}`;
+          return;
+        }
+        if (data.status === 'FAILURE') {
+          el.style.color = '#f87171';
+          el.textContent = `Job failed. Check Flower for details.\nJob: ${jobId}`;
+          return;
+        }
+        el.textContent = `Status: ${data.status}… (${jobId})`;
+      } catch {}
+    }
+    el.textContent = `Timed out polling. Check Flower.\nJob: ${jobId}`;
+  }
+
+  // ── Refresh Countdown ────────────────────────────────────────────────────
+  let countdownTimer = null;
+  let countdownSec = 60;
+
+  function startCountdown() {
+    countdownSec = 60;
+    countdownTimer = setInterval(() => {
+      countdownSec--;
+      const el = document.getElementById('refresh-countdown');
+      if (el) el.textContent = `next refresh in ${countdownSec}s`;
+      if (countdownSec <= 0) clearInterval(countdownTimer);
+    }, 1000);
+  }
+
+  function resetCountdown() {
+    clearInterval(countdownTimer);
+    startCountdown();
+  }
+
   // ── Init ──────────────────────────────────────────────────────────────────
   checkHealth();
   setInterval(checkHealth, 15_000);
-  if (API_KEY) loadAnalytics();
+  if (API_KEY) {
+    loadAnalytics();
+    setInterval(() => { loadAnalytics(); resetCountdown(); }, 60_000);
+    startCountdown();
+    loadAnomalies();
+    connectWebSocket();
+    // Pre-fill replay dates to last 24 hours
+    const now = new Date();
+    const yesterday = new Date(now - 86_400_000);
+    document.getElementById('replay-end').value = now.toISOString().slice(0, 16);
+    document.getElementById('replay-start').value = yesterday.toISOString().slice(0, 16);
+  }
 </script>
 </body>
 </html>

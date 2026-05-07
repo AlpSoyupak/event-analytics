@@ -1,18 +1,18 @@
-"""LangChain analytics agent using tool-calling and LCEL.
+"""LangChain analytics agent using LangGraph's create_react_agent.
 
-Provides the same (answer, tools_used) interface as AnalyticsAgent but uses:
+AgentExecutor was removed in LangChain 1.x. This uses the modern replacement:
 - ChatGroq via langchain-groq
 - LangChain StructuredTool wrappers around analytics_service functions
-- create_tool_calling_agent + AgentExecutor (LCEL under the hood)
+- LangGraph create_react_agent (the current recommended agentic loop)
 """
 import json
 import uuid
 from datetime import datetime, timezone
 
-from langchain.agents import AgentExecutor, create_tool_calling_agent
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import SystemMessage, ToolMessage
 from langchain_core.tools import StructuredTool
 from langchain_groq import ChatGroq
+from langgraph.prebuilt import create_react_agent
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,12 +33,6 @@ When asked about trends, anomalies, or recommendations:
 
 Available event types: page_view, button_click, form_submit, purchase,
 signup, login, logout, search, add_to_cart, checkout."""
-
-_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", _SYSTEM),
-    ("human", "{question}"),
-    MessagesPlaceholder("agent_scratchpad"),
-])
 
 
 def _dt(s: str) -> datetime:
@@ -87,10 +81,10 @@ class _RetentionIn(BaseModel):
 # ── Agent ─────────────────────────────────────────────────────────────────────
 
 class LangChainAnalyticsAgent:
-    """Analytics agent built on LangChain tool-calling and LCEL.
+    """Analytics agent built on LangGraph's create_react_agent.
 
     Wraps analytics_service functions as LangChain StructuredTools bound to the
-    current tenant/session, then runs them through ChatGroq via AgentExecutor.
+    current tenant/session, then drives the tool-calling loop via LangGraph.
     """
 
     def __init__(self, tenant_id: uuid.UUID, db: AsyncSession) -> None:
@@ -170,14 +164,24 @@ class LangChainAnalyticsAgent:
             model=settings.groq_model,
         )
 
-        agent = create_tool_calling_agent(llm, tools, _PROMPT)
-        executor = AgentExecutor(agent=agent, tools=tools, max_iterations=6)
+        graph = create_react_agent(
+            llm,
+            tools,
+            prompt=SystemMessage(content=_SYSTEM.format(today=today)),
+        )
 
-        result = await executor.ainvoke({"question": question, "today": today})
+        result = await graph.ainvoke({
+            "messages": [{"role": "human", "content": question}]
+        })
 
+        # Final AI message is always last
+        answer = result["messages"][-1].content
+
+        # ToolMessages carry the name of the tool that was called
         tools_used = [
-            step[0].tool
-            for step in result.get("intermediate_steps", [])
-            if hasattr(step[0], "tool")
+            msg.name
+            for msg in result["messages"]
+            if isinstance(msg, ToolMessage)
         ]
-        return result.get("output", ""), tools_used
+
+        return answer, tools_used

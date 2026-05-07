@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.models.event import Event
 from app.models.tenant import Tenant
 from app.schemas.event import EventCreate
+from app.services.cache_service import cache_service
 
 settings = get_settings()
 
@@ -48,8 +49,28 @@ def _build_event(tenant: Tenant, data: EventCreate, now: datetime) -> Event:
         source=data.source,
         properties=data.properties,
         meta=data.meta,
-        received_at=now,
+        received_at=data.received_at or now,
     )
+
+
+async def _publish_to_websocket(event: Event) -> None:
+    try:
+        r = await cache_service.client()
+        payload = json.dumps(
+            {
+                "event_id": str(event.id),
+                "event_type": event.event_type,
+                "user_id": event.user_id,
+                "session_id": event.session_id,
+                "properties": event.properties,
+                "received_at": event.received_at.isoformat(),
+                "source": event.source,
+            },
+            default=str,
+        )
+        await r.publish(f"ws:events:{event.tenant_id}", payload)
+    except Exception:
+        pass
 
 
 async def _publish_to_kafka(event: Event) -> None:
@@ -85,6 +106,7 @@ class EventService:
         db.add(event)
         await db.flush()
         await _publish_to_kafka(event)
+        await _publish_to_websocket(event)
         return event
 
     async def ingest_batch(
@@ -97,6 +119,8 @@ class EventService:
         events = [_build_event(tenant, item, now) for item in items]
         db.add_all(events)
         await db.flush()
+        for event in events:
+            await _publish_to_websocket(event)
         return events
 
     async def list_events(

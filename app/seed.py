@@ -20,16 +20,18 @@ EVENT_TYPES = [
 PAGES = ["/home", "/pricing", "/docs", "/blog", "/about", "/login", "/signup"]
 
 
-async def main() -> None:
+async def main(api_key: str | None = None) -> None:
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=30) as client:
-        # Create demo tenant
-        resp = await client.post("/tenants", json={"name": "Demo Corp", "plan": "pro"})
-        resp.raise_for_status()
-        tenant = resp.json()
-        api_key = tenant["api_key"]
-        print(f"Created tenant: {tenant['name']}")
-        print(f"API Key:        {api_key}")
-        print(f"Tenant ID:      {tenant['id']}\n")
+        if api_key:
+            print(f"Using existing API key: {api_key}\n")
+        else:
+            resp = await client.post("/tenants", json={"name": "Demo Corp", "plan": "pro"})
+            resp.raise_for_status()
+            tenant = resp.json()
+            api_key = tenant["api_key"]
+            print(f"Created tenant: {tenant['name']}")
+            print(f"API Key:        {api_key}")
+            print(f"Tenant ID:      {tenant['id']}\n")
 
         headers = {"X-API-Key": api_key}
         users = [str(uuid.uuid4()) for _ in range(50)]
@@ -41,10 +43,16 @@ async def main() -> None:
             batch = []
             for _ in range(random.randint(50, 200)):
                 user = random.choice(users)
+                # Spread events across random hours within the day
+                event_time = day + timedelta(
+                    hours=random.randint(0, 23),
+                    minutes=random.randint(0, 59),
+                )
                 batch.append({
                     "event_type": random.choice(EVENT_TYPES),
                     "user_id": user,
                     "session_id": str(uuid.uuid4()),
+                    "received_at": event_time.isoformat(),
                     "properties": {
                         "page": random.choice(PAGES),
                         "value": round(random.uniform(0, 500), 2),
@@ -65,4 +73,6 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import sys
+    key = sys.argv[1] if len(sys.argv) > 1 else None
+    asyncio.run(main(key))

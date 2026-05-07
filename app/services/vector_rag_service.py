@@ -1,48 +1,65 @@
 """Semantic code-search RAG using LangChain FAISS + HuggingFace embeddings.
 
-Replaces BM25 keyword matching in rag_service with cosine-similarity vector
-search over the same function/class-boundary chunks. Falls back silently if
-build_index() has not been called yet.
+This service is **optional** — it requires four extra packages that are not
+installed by default (see requirements.txt). Call build_index() only after
+uncommenting and reinstalling those deps; it will raise ImportError with a
+clear message otherwise.
 
-The embedding model (all-MiniLM-L6-v2, ~90 MB) is downloaded on first use
-from HuggingFace Hub and cached locally by sentence-transformers.
+When the index is built, retrieve() uses cosine similarity instead of BM25.
 """
 import re
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-from langchain_community.vectorstores import FAISS
-from langchain_core.documents import Document
-from langchain_huggingface import HuggingFaceEmbeddings
+if TYPE_CHECKING:
+    from langchain_community.vectorstores import FAISS
+    from langchain_huggingface import HuggingFaceEmbeddings
 
 _DEF_RE = re.compile(r'\n(?=(?:async )?def |class )')
 _SKIP_DIRS = {"__pycache__", "alembic", "migrations", ".git"}
 _EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 
+_MISSING_DEPS_MSG = (
+    "Vector RAG dependencies are not installed. "
+    "Uncomment the four optional lines in requirements.txt "
+    "(langchain-community, langchain-huggingface, faiss-cpu, sentence-transformers) "
+    "and rebuild the Docker image."
+)
+
 
 class VectorRAGService:
     """Semantic search over project Python source using FAISS + sentence-transformers.
 
-    Call build_index() once at startup or after code changes. retrieve() then
-    uses cosine similarity instead of BM25 keyword overlap, returning better
-    results for natural-language queries like "how does the retention query work?".
+    All heavy imports are deferred to build_index() so the module loads
+    cleanly even when the optional packages are absent.
     """
 
     def __init__(self) -> None:
-        self._store: Optional[FAISS] = None
-        self._embeddings: Optional[HuggingFaceEmbeddings] = None
+        self._store: Optional[Any] = None
+        self._embeddings: Optional[Any] = None
 
-    def _get_embeddings(self) -> HuggingFaceEmbeddings:
+    def _get_embeddings(self) -> Any:
         if self._embeddings is None:
+            try:
+                from langchain_huggingface import HuggingFaceEmbeddings
+            except ImportError:
+                raise ImportError(_MISSING_DEPS_MSG)
             self._embeddings = HuggingFaceEmbeddings(model_name=_EMBEDDING_MODEL)
         return self._embeddings
 
     def build_index(self, root: str = "app") -> int:
         """Walk *root*, chunk each .py file by definition boundaries, build FAISS index.
 
+        Raises ImportError if the optional dependencies are not installed.
         Returns the number of chunks indexed.
         """
-        docs: list[Document] = []
+        try:
+            from langchain_community.vectorstores import FAISS
+            from langchain_core.documents import Document
+        except ImportError:
+            raise ImportError(_MISSING_DEPS_MSG)
+
+        docs: list[Any] = []
 
         for path in sorted(Path(root).rglob("*.py")):
             if any(part in _SKIP_DIRS for part in path.parts):
@@ -71,7 +88,10 @@ class VectorRAGService:
         return len(docs)
 
     def retrieve(self, query: str, top_k: int = 3) -> str:
-        """Return the top-k semantically similar code chunks for *query*."""
+        """Return the top-k semantically similar code chunks for *query*.
+
+        Returns an empty string if the index has not been built yet.
+        """
         if not self._store:
             return ""
 
