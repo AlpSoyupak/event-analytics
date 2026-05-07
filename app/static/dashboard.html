@@ -203,13 +203,13 @@
             <label class="section-title">Event Type</label>
             <select id="event-type" class="form-select form-select-sm">
               <option>page_view</option>
-              <option>button_click</option>
-              <option>signup</option>
-              <option>login</option>
-              <option>purchase</option>
+              <option>product_view</option>
               <option>add_to_cart</option>
               <option>checkout</option>
+              <option>purchase</option>
               <option>search</option>
+              <option>signup</option>
+              <option>login</option>
             </select>
           </div>
           <div class="mb-2">
@@ -218,7 +218,7 @@
           </div>
           <div class="mb-3">
             <label class="section-title">Properties (JSON)</label>
-            <textarea id="event-props" class="form-control form-control-sm" rows="3" style="font-family:monospace;font-size:0.78rem">{"page": "/home", "value": 29.99}</textarea>
+            <textarea id="event-props" class="form-control form-control-sm" rows="3" style="font-family:monospace;font-size:0.78rem">{"product_id": "p001", "product_name": "Wireless Headphones", "category": "Electronics", "price": 79.99, "value": 79.99}</textarea>
           </div>
           <div class="d-flex gap-2">
             <button class="btn btn-primary btn-sm flex-fill" onclick="sendEvent()">Send 1 Event</button>
@@ -313,22 +313,28 @@
 
           <!-- Summary stat cards -->
           <div class="row g-3 mb-4">
-            <div class="col-4">
+            <div class="col-3">
               <div class="stat-card">
                 <div class="stat-value" id="stat-total">—</div>
                 <div class="stat-label">Total Events</div>
               </div>
             </div>
-            <div class="col-4">
+            <div class="col-3">
               <div class="stat-card">
                 <div class="stat-value" id="stat-users">—</div>
                 <div class="stat-label">Unique Users</div>
               </div>
             </div>
-            <div class="col-4">
+            <div class="col-3">
               <div class="stat-card">
                 <div class="stat-value" id="stat-sessions">—</div>
                 <div class="stat-label">Sessions</div>
+              </div>
+            </div>
+            <div class="col-3">
+              <div class="stat-card">
+                <div class="stat-value" id="stat-revenue" style="color:#4ade80">—</div>
+                <div class="stat-label">Revenue (period)</div>
               </div>
             </div>
           </div>
@@ -357,7 +363,7 @@
               <div class="section-title">Conversion Funnel</div>
               <div class="mb-2 d-flex gap-1 flex-wrap">
                 <span class="small text-secondary">Steps:</span>
-                <span class="tag" id="f1" onclick="toggleFunnelStep(this)" style="cursor:pointer">page_view ✓</span>
+                <span class="tag" id="f1" onclick="toggleFunnelStep(this)" style="cursor:pointer">product_view ✓</span>
                 <span class="tag" id="f2" onclick="toggleFunnelStep(this)" style="cursor:pointer;opacity:0.4">add_to_cart</span>
                 <span class="tag" id="f3" onclick="toggleFunnelStep(this)" style="cursor:pointer;opacity:0.4">purchase</span>
               </div>
@@ -380,6 +386,103 @@
         <div class="card-body">
           <div id="anomaly-display">
             <div class="text-secondary small">Load analytics to trigger anomaly detection.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Product Performance -->
+      <div class="card mb-4">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <div>Product Performance <span class="ms-2 small" style="color:#475569;text-transform:none;letter-spacing:0">(views → cart → purchase conversion)</span></div>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadProducts()">↻ Refresh</button>
+        </div>
+        <div class="card-body">
+          <div id="product-table">
+            <div class="text-secondary small">Load analytics to see product data.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Traffic Sources -->
+      <div class="card mb-4">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <div>Traffic Source Conversion <span class="ms-2 small" style="color:#475569;text-transform:none;letter-spacing:0">(same product, different referrer — Level 2)</span></div>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadTrafficSources()">↻ Refresh</button>
+        </div>
+        <div class="card-body">
+          <p class="text-secondary small mb-3">Identifies whether low conversion is a <strong>product problem</strong> (bad across all referrers) or a <strong>traffic-quality problem</strong> (good from search, bad from banner).</p>
+          <div id="traffic-source-table">
+            <div class="text-secondary small">Load analytics to see traffic source data.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Experiment Results -->
+      <div class="card mb-4">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <div>A/B Experiment Results <span class="ms-2 small" style="color:#475569;text-transform:none;letter-spacing:0">(causal evidence — Level 3)</span></div>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadExperiments()">↻ Refresh</button>
+        </div>
+        <div class="card-body">
+          <p class="text-secondary small mb-3">The only section where you can make <strong>causal claims</strong>. Uplift % is the change in view-to-purchase rate vs. the control group.</p>
+          <div id="experiment-results">
+            <div class="text-secondary small">Load analytics to see experiment data.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Customer Segments -->
+      <div class="card mb-4">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <div>Customer Segments <span class="ms-2 small" style="color:#475569;text-transform:none;letter-spacing:0">(one-time / repeat / loyal — LTV &amp; churn signals)</span></div>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadCustomers()">↻ Refresh</button>
+        </div>
+        <div class="card-body">
+          <p class="text-secondary small mb-3">Answers: "Who are my best customers?", "How many users only buy once?", "What's my repeat-buyer revenue share?"</p>
+          <div id="customer-segments">
+            <div class="text-secondary small">Load analytics to see customer segments.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Catalog Gaps -->
+      <div class="card mb-4">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <div>Catalog Gaps <span class="ms-2 small" style="color:#475569;text-transform:none;letter-spacing:0">(searches with zero results = unmet demand)</span></div>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadSearchGaps()">↻ Refresh</button>
+        </div>
+        <div class="card-body">
+          <p class="text-secondary small mb-3">Answers: "What should I add to my catalog?", "What are users trying to find that I don't carry?"</p>
+          <div id="search-gaps">
+            <div class="text-secondary small">Load analytics to see catalog gaps.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Basket Analysis -->
+      <div class="card mb-4">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <div>Basket Analysis <span class="ms-2 small" style="color:#475569;text-transform:none;letter-spacing:0">(products bought together — cross-sell signals)</span></div>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadBasket()">↻ Refresh</button>
+        </div>
+        <div class="card-body">
+          <p class="text-secondary small mb-3">Answers: "What should I bundle?", "Which products should I recommend together?"</p>
+          <div id="basket-analysis">
+            <div class="text-secondary small">Load analytics to see basket data.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Best Selling Times -->
+      <div class="card mb-4">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <div>Best Selling Times <span class="ms-2 small" style="color:#475569;text-transform:none;letter-spacing:0">(when to run promotions and send emails)</span></div>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadSellingTimes()">↻ Refresh</button>
+        </div>
+        <div class="card-body">
+          <p class="text-secondary small mb-3">Answers: "When should I send marketing emails?", "When is my busiest day?", "What hour drives the most revenue?"</p>
+          <div id="selling-times">
+            <div class="text-secondary small">Load analytics to see selling times.</div>
           </div>
         </div>
       </div>
@@ -456,7 +559,7 @@
   let API_KEY = localStorage.getItem('ea_api_key') || '';
   let rangeDays = 1;
   let tsChart = null;
-  let funnelSteps = new Set(['page_view']);
+  let funnelSteps = new Set(['product_view']);
 
   const BASE = '';  // same origin
 
@@ -566,15 +669,35 @@
   async function sendBatch() {
     if (!API_KEY) { alert('Create a tenant first (Step 1).'); return; }
 
-    const types = ['page_view','button_click','add_to_cart','purchase','signup','login','search'];
-    const pages = ['/home','/pricing','/docs','/signup','/checkout'];
-    const users = Array.from({length: 10}, (_, i) => `user_${i.toString().padStart(3,'0')}`);
-    const events = Array.from({length: 50}, () => ({
-      event_type: types[Math.floor(Math.random() * types.length)],
-      user_id: users[Math.floor(Math.random() * users.length)],
-      session_id: 'sess_' + Math.random().toString(36).slice(2, 10),
-      properties: { page: pages[Math.floor(Math.random() * pages.length)], value: Math.round(Math.random() * 500 * 100) / 100 }
-    }));
+    const PRODUCTS = [
+      {id:'p001', name:'Wireless Headphones', category:'Electronics', price:79.99},
+      {id:'p002', name:'Running Shoes',        category:'Apparel',     price:124.99},
+      {id:'p003', name:'Coffee Maker',         category:'Kitchen',     price:49.99},
+      {id:'p004', name:'Yoga Mat',             category:'Fitness',     price:34.99},
+      {id:'p006', name:'Bluetooth Speaker',    category:'Electronics', price:59.99},
+      {id:'p010', name:'Smart Watch',          category:'Electronics', price:199.99},
+    ];
+    const PAGES = ['/home', '/products', '/categories', '/deals'];
+    const users = Array.from({length: 8}, (_, i) => `user_${i.toString().padStart(3,'0')}`);
+    const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+    const events = [];
+
+    for (let i = 0; i < 10; i++) {
+      const user = pick(users);
+      const sess = 'sess_' + Math.random().toString(36).slice(2, 10);
+      events.push({event_type:'page_view', user_id:user, session_id:sess, properties:{page:pick(PAGES)}});
+      const viewed = PRODUCTS.slice(0, Math.floor(Math.random()*3)+1);
+      for (const p of viewed) {
+        events.push({event_type:'product_view', user_id:user, session_id:sess, properties:{product_id:p.id, product_name:p.name, category:p.category, price:p.price}});
+        if (Math.random() < 0.45) {
+          const qty = Math.floor(Math.random()*2)+1;
+          events.push({event_type:'add_to_cart', user_id:user, session_id:sess, properties:{product_id:p.id, product_name:p.name, category:p.category, price:p.price, quantity:qty, value:Math.round(p.price*qty*100)/100}});
+          if (Math.random() < 0.55) {
+            events.push({event_type:'purchase', user_id:user, session_id:sess, properties:{product_id:p.id, product_name:p.name, category:p.category, price:p.price, quantity:qty, value:Math.round(p.price*qty*100)/100}});
+          }
+        }
+      }
+    }
 
     try {
       const r = await fetch(`${BASE}/api/v1/events/batch`, {
@@ -582,7 +705,7 @@
       });
       const data = await r.json();
       if (!r.ok) throw new Error(JSON.stringify(data));
-      log(`✓ Batch: ${data.accepted} events accepted`);
+      log(`✓ Batch: ${data.accepted} e-commerce events accepted`);
       setTimeout(loadAnalytics, 500);
     } catch (e) {
       log(`✗ Batch failed: ${e.message}`, false);
@@ -599,18 +722,30 @@
 
   async function loadAnalytics() {
     if (!API_KEY) return;
-    await Promise.all([loadSummary(), loadTimeseries(), loadTopEvents()]);
+    await Promise.all([
+      loadSummary(), loadTimeseries(), loadTopEvents(),
+      loadProducts(), loadTrafficSources(), loadExperiments(),
+      loadCustomers(), loadSearchGaps(), loadBasket(), loadSellingTimes(),
+    ]);
   }
 
   async function loadSummary() {
     const { start, end } = dateRange();
     try {
-      const r = await fetch(`${BASE}/api/v1/analytics/summary?start=${start}&end=${end}`, { headers: headers() });
-      if (!r.ok) return;
-      const d = await r.json();
-      document.getElementById('stat-total').textContent = fmt(d.total_events);
-      document.getElementById('stat-users').textContent = fmt(d.unique_users);
-      document.getElementById('stat-sessions').textContent = fmt(d.unique_sessions);
+      const [sRes, rRes] = await Promise.all([
+        fetch(`${BASE}/api/v1/analytics/summary?start=${start}&end=${end}`, { headers: headers() }),
+        fetch(`${BASE}/api/v1/analytics/revenue?start=${start}&end=${end}`, { headers: headers() }),
+      ]);
+      if (sRes.ok) {
+        const d = await sRes.json();
+        document.getElementById('stat-total').textContent = fmt(d.total_events);
+        document.getElementById('stat-users').textContent = fmt(d.unique_users);
+        document.getElementById('stat-sessions').textContent = fmt(d.unique_sessions);
+      }
+      if (rRes.ok) {
+        const r = await rRes.json();
+        document.getElementById('stat-revenue').textContent = '$' + fmt(r.total_revenue);
+      }
     } catch {}
   }
 
@@ -692,6 +827,283 @@
         </div>
       `).join('');
       document.getElementById('top-events-table').innerHTML = html || '<div class="text-secondary small">No data</div>';
+    } catch {}
+  }
+
+  // ── Product Performance ───────────────────────────────────────────────────
+  async function loadProducts() {
+    if (!API_KEY) return;
+    const { start, end } = dateRange();
+    try {
+      const r = await fetch(`${BASE}/api/v1/analytics/products?start=${start}&end=${end}&limit=10`, { headers: headers() });
+      if (!r.ok) return;
+      const data = await r.json();
+      if (!data.length) {
+        document.getElementById('product-table').innerHTML = '<div class="text-secondary small">No product data yet. Send e-commerce events first.</div>';
+        return;
+      }
+      const maxRev = data[0]?.revenue || 1;
+      const rows = data.map(p => {
+        const convColor = p.view_to_purchase_rate >= 10 ? '#4ade80' : p.view_to_purchase_rate >= 4 ? '#fbbf24' : '#f87171';
+        return `
+          <tr>
+            <td class="small">${p.product_name}<br><span style="color:#64748b;font-size:0.7rem">${p.category}</span></td>
+            <td class="small text-center">${fmt(p.views)}</td>
+            <td class="small text-center">${fmt(p.cart_adds)}<br><span style="color:#94a3b8;font-size:0.7rem">${p.view_to_cart_rate}%</span></td>
+            <td class="small text-center">${fmt(p.purchases)}<br><span style="color:#94a3b8;font-size:0.7rem">${p.cart_to_purchase_rate}%</span></td>
+            <td class="small text-center"><span style="color:${convColor};font-weight:600">${p.view_to_purchase_rate}%</span></td>
+            <td class="small text-end" style="color:#4ade80">$${fmt(p.revenue)}</td>
+          </tr>`;
+      }).join('');
+      document.getElementById('product-table').innerHTML = `
+        <div class="table-responsive">
+          <table class="table table-sm mb-0" style="font-size:0.82rem">
+            <thead><tr>
+              <th class="small" style="color:#94a3b8">Product</th>
+              <th class="small text-center" style="color:#94a3b8">Views</th>
+              <th class="small text-center" style="color:#94a3b8">Cart</th>
+              <th class="small text-center" style="color:#94a3b8">Purchases</th>
+              <th class="small text-center" style="color:#94a3b8">View→Buy</th>
+              <th class="small text-end" style="color:#94a3b8">Revenue</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    } catch {}
+  }
+
+  // ── Customer Segments ────────────────────────────────────────────────────
+  async function loadCustomers() {
+    if (!API_KEY) return;
+    const { start, end } = dateRange();
+    try {
+      const r = await fetch(`${BASE}/api/v1/analytics/customers?start=${start}&end=${end}`, { headers: headers() });
+      if (!r.ok) return;
+      const data = await r.json();
+      if (!data.length) { document.getElementById('customer-segments').innerHTML = '<div class="text-secondary small">No purchase data yet.</div>'; return; }
+
+      const SEG_COLOR = { loyal: '#4ade80', repeat: '#a78bfa', one_time: '#fbbf24' };
+      const SEG_LABEL = { loyal: 'Loyal (5+ orders)', repeat: 'Repeat (2–4)', one_time: 'One-time' };
+      const totalRev = data.reduce((s, d) => s + d.total_revenue, 0);
+      const html = data.map(s => {
+        const col = SEG_COLOR[s.segment] || '#94a3b8';
+        const share = totalRev > 0 ? Math.round(s.total_revenue / totalRev * 100) : 0;
+        return `
+          <div class="d-flex align-items-center gap-3 mb-3 p-3" style="background:#20243a;border-radius:8px;border-left:3px solid ${col}">
+            <div style="flex:1">
+              <div style="color:${col};font-weight:600;font-size:0.85rem">${SEG_LABEL[s.segment] || s.segment}</div>
+              <div class="small text-secondary mt-1">${fmt(s.user_count)} users · avg ${s.avg_orders} orders · avg ${s.avg_days_active}d active</div>
+            </div>
+            <div class="text-end">
+              <div style="color:#4ade80;font-weight:700">$${fmt(s.total_revenue)}</div>
+              <div class="small text-secondary">${share}% of revenue · avg LTV $${fmt(s.avg_ltv)}</div>
+            </div>
+          </div>`;
+      }).join('');
+      document.getElementById('customer-segments').innerHTML = html;
+    } catch {}
+  }
+
+  // ── Search Gaps ───────────────────────────────────────────────────────────
+  async function loadSearchGaps() {
+    if (!API_KEY) return;
+    const { start, end } = dateRange();
+    try {
+      const r = await fetch(`${BASE}/api/v1/analytics/search-gaps?start=${start}&end=${end}&limit=12`, { headers: headers() });
+      if (!r.ok) return;
+      const data = await r.json();
+      if (!data.length) { document.getElementById('search-gaps').innerHTML = '<div class="text-secondary small">No search data yet.</div>'; return; }
+
+      const rows = data.map(q => {
+        const isGap = q.zero_result_pct >= 50;
+        const badgeStyle = isGap
+          ? 'background:rgba(248,113,113,0.15);color:#f87171;border:1px solid rgba(248,113,113,0.3)'
+          : 'background:rgba(74,222,128,0.1);color:#4ade80;border:1px solid rgba(74,222,128,0.2)';
+        return `<tr>
+          <td class="small">${q.query}</td>
+          <td class="small text-center">${fmt(q.search_count)}</td>
+          <td class="small text-center">${q.avg_results}</td>
+          <td class="small text-center">
+            <span class="anomaly-badge" style="${badgeStyle}">${q.zero_result_pct}%</span>
+          </td>
+        </tr>`;
+      }).join('');
+      document.getElementById('search-gaps').innerHTML = `
+        <div class="table-responsive">
+          <table class="table table-sm mb-0" style="font-size:0.82rem">
+            <thead><tr>
+              <th style="color:#94a3b8">Query</th>
+              <th class="text-center" style="color:#94a3b8">Searches</th>
+              <th class="text-center" style="color:#94a3b8">Avg Results</th>
+              <th class="text-center" style="color:#94a3b8">Zero-Result %</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        <div class="small text-secondary mt-2">Red = catalog gap (≥50% searches return nothing)</div>`;
+    } catch {}
+  }
+
+  // ── Basket Analysis ───────────────────────────────────────────────────────
+  async function loadBasket() {
+    if (!API_KEY) return;
+    const { start, end } = dateRange();
+    try {
+      const r = await fetch(`${BASE}/api/v1/analytics/basket?start=${start}&end=${end}&limit=8`, { headers: headers() });
+      if (!r.ok) return;
+      const data = await r.json();
+      if (!data.length) { document.getElementById('basket-analysis').innerHTML = '<div class="text-secondary small">No multi-item orders yet. Re-seed to generate basket data.</div>'; return; }
+
+      const maxCount = data[0]?.co_purchase_count || 1;
+      const rows = data.map(p => `
+        <div class="mb-2">
+          <div class="d-flex justify-content-between mb-1" style="font-size:0.8rem">
+            <span><strong>${p.product_a_name}</strong> <span style="color:#64748b">+</span> <strong>${p.product_b_name}</strong></span>
+            <span class="text-secondary">${fmt(p.co_purchase_count)}× · attach ${Math.max(p.attach_rate_a, p.attach_rate_b)}%</span>
+          </div>
+          <div style="background:#2d3148;border-radius:4px;height:10px;overflow:hidden">
+            <div style="width:${Math.round(p.co_purchase_count/maxCount*100)}%;height:100%;background:#a78bfa;border-radius:4px"></div>
+          </div>
+        </div>`).join('');
+      document.getElementById('basket-analysis').innerHTML = rows;
+    } catch {}
+  }
+
+  // ── Selling Times ─────────────────────────────────────────────────────────
+  async function loadSellingTimes() {
+    if (!API_KEY) return;
+    const { start, end } = dateRange();
+    try {
+      const r = await fetch(`${BASE}/api/v1/analytics/selling-times?start=${start}&end=${end}`, { headers: headers() });
+      if (!r.ok) return;
+      const d = await r.json();
+      if (!d.by_hour) { document.getElementById('selling-times').innerHTML = '<div class="text-secondary small">No purchase data yet.</div>'; return; }
+
+      const maxHourRev  = Math.max(...d.by_hour.map(h => h.revenue), 1);
+      const maxDayRev   = Math.max(...d.by_day.map(h => h.revenue), 1);
+      const hourBars = d.by_hour.map(h => {
+        const pct = Math.round(h.revenue / maxHourRev * 100);
+        const isPeak = h.hour === d.peak_hour;
+        return `<div title="${h.hour}:00 — $${fmt(h.revenue)}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+          <div style="width:100%;height:${Math.max(pct,2)}px;background:${isPeak?'#4ade80':'#7c3aed'};opacity:${isPeak?1:0.6};border-radius:2px 2px 0 0"></div>
+          <span style="font-size:0.6rem;color:#475569">${h.hour}</span>
+        </div>`;
+      }).join('');
+
+      const dayBars = d.by_day.map(dy => {
+        const pct = Math.round(dy.revenue / maxDayRev * 100);
+        const isPeak = dy.day === d.peak_day;
+        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+          <div style="width:100%;height:${Math.max(pct,2)}px;background:${isPeak?'#4ade80':'#a78bfa'};opacity:${isPeak?1:0.6};border-radius:2px 2px 0 0"></div>
+          <span style="font-size:0.6rem;color:#475569">${dy.day.slice(0,3)}</span>
+        </div>`;
+      }).join('');
+
+      document.getElementById('selling-times').innerHTML = `
+        <div class="mb-1 d-flex gap-3" style="font-size:0.8rem">
+          <span>Peak hour: <strong style="color:#4ade80">${d.peak_hour}:00</strong></span>
+          <span>Peak day: <strong style="color:#4ade80">${d.peak_day}</strong></span>
+        </div>
+        <div class="section-title mt-3 mb-1">By Hour</div>
+        <div style="display:flex;align-items:flex-end;height:60px;gap:1px">${hourBars}</div>
+        <div class="section-title mt-3 mb-1">By Day of Week</div>
+        <div style="display:flex;align-items:flex-end;height:60px;gap:4px">${dayBars}</div>`;
+    } catch {}
+  }
+
+  // ── Traffic Sources ───────────────────────────────────────────────────────
+  async function loadTrafficSources() {
+    if (!API_KEY) return;
+    const { start, end } = dateRange();
+    try {
+      const r = await fetch(`${BASE}/api/v1/analytics/traffic-sources?start=${start}&end=${end}`, { headers: headers() });
+      if (!r.ok) return;
+      const data = await r.json();
+      if (!data.length) {
+        document.getElementById('traffic-source-table').innerHTML = '<div class="text-secondary small">No traffic source data yet.</div>';
+        return;
+      }
+
+      // Group by product
+      const byProduct = {};
+      for (const row of data) {
+        if (!byProduct[row.product_id]) byProduct[row.product_id] = { name: row.product_name, referrers: [] };
+        byProduct[row.product_id].referrers.push(row);
+      }
+
+      const REFERRER_COLOR = {
+        search: '#4ade80', email_campaign: '#a78bfa', deals_page: '#fbbf24',
+        category_page: '#60a5fa', homepage_banner: '#f87171',
+      };
+
+      let html = '';
+      for (const [pid, prod] of Object.entries(byProduct)) {
+        const sorted = prod.referrers.sort((a, b) => b.view_to_purchase_rate - a.view_to_purchase_rate);
+        const maxRate = sorted[0]?.view_to_purchase_rate || 1;
+        html += `<div class="mb-3"><div class="section-title mb-1">${prod.name}</div>`;
+        for (const row of sorted) {
+          const color = REFERRER_COLOR[row.referrer] || '#94a3b8';
+          const pct = maxRate > 0 ? Math.round(row.view_to_purchase_rate / maxRate * 100) : 0;
+          html += `
+            <div class="d-flex align-items-center gap-2 mb-1" style="font-size:0.78rem">
+              <span style="width:130px;color:${color};flex-shrink:0">${row.referrer}</span>
+              <div style="flex:1;background:#2d3148;border-radius:4px;height:16px;overflow:hidden">
+                <div style="width:${pct}%;height:100%;background:${color};opacity:0.7;border-radius:4px"></div>
+              </div>
+              <span style="width:40px;text-align:right;color:#94a3b8">${row.view_to_purchase_rate}%</span>
+              <span style="width:60px;text-align:right;color:#475569">${fmt(row.views)} views</span>
+            </div>`;
+        }
+        html += '</div>';
+      }
+      document.getElementById('traffic-source-table').innerHTML = html;
+    } catch {}
+  }
+
+  // ── Experiment Results ────────────────────────────────────────────────────
+  async function loadExperiments() {
+    if (!API_KEY) return;
+    const { start, end } = dateRange();
+    try {
+      const r = await fetch(`${BASE}/api/v1/analytics/experiments?start=${start}&end=${end}`, { headers: headers() });
+      if (!r.ok) return;
+      const data = await r.json();
+      if (!data.length) {
+        document.getElementById('experiment-results').innerHTML = '<div class="text-secondary small">No experiment data yet. Re-seed with the updated seed.py.</div>';
+        return;
+      }
+
+      let html = '';
+      for (const exp of data) {
+        html += `<div class="mb-4">
+          <div class="section-title mb-2">${exp.experiment_name.replace(/_/g,' ')}</div>
+          <div class="row g-2">`;
+        for (const v of exp.variants) {
+          const uplift = v.uplift_vs_control_pct;
+          const isControl = uplift === 0;
+          const upliftColor = uplift > 0 ? '#4ade80' : uplift < 0 ? '#f87171' : '#94a3b8';
+          const borderStyle = isControl ? '1px solid #2d3148' : `1px solid ${upliftColor}40`;
+          html += `
+            <div class="col-md-6">
+              <div style="background:#20243a;border-radius:8px;padding:14px;${borderStyle}">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <strong style="font-size:0.85rem">${v.variant.replace(/_/g,' ')}</strong>
+                  ${isControl
+                    ? '<span class="anomaly-badge" style="background:rgba(148,163,184,0.15);color:#94a3b8;border:1px solid rgba(148,163,184,0.3)">control</span>'
+                    : `<span class="anomaly-badge anomaly-spike" style="color:${upliftColor};border-color:${upliftColor}40">${uplift > 0 ? '+' : ''}${uplift}% uplift</span>`}
+                </div>
+                <div class="row g-2" style="font-size:0.78rem">
+                  <div class="col-6"><div style="color:#64748b">Views</div><div>${fmt(v.views)}</div></div>
+                  <div class="col-6"><div style="color:#64748b">Purchases</div><div>${fmt(v.purchases)}</div></div>
+                  <div class="col-6"><div style="color:#64748b">Conversion</div><div style="color:${upliftColor};font-weight:600">${v.view_to_purchase_rate}%</div></div>
+                  <div class="col-6"><div style="color:#64748b">Revenue</div><div style="color:#4ade80">$${fmt(v.revenue)}</div></div>
+                </div>
+              </div>
+            </div>`;
+        }
+        html += '</div></div>';
+      }
+      document.getElementById('experiment-results').innerHTML = html;
     } catch {}
   }
 

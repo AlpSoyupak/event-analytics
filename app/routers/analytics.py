@@ -9,6 +9,8 @@ from app.database import get_db
 from app.dependencies.rate_limit import require_tenant
 from app.models.tenant import Tenant
 from app.services.analytics_service import analytics_service
+
+
 from app.services.cache_service import cache_service
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -77,6 +79,97 @@ async def get_anomalies(tenant: Tenant = Depends(require_tenant)):
     raw = await r.get(f"anomalies:{tenant.id}")
     anomalies = json.loads(raw) if raw else []
     return {"anomalies": anomalies, "checked_at": datetime.now(timezone.utc).isoformat()}
+
+
+@router.get("/customers")
+async def get_customer_segments(
+    start: datetime = Query(default_factory=lambda: _days_ago(30)),
+    end: datetime = Query(default_factory=_now),
+    tenant: Tenant = Depends(require_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """User segments by purchase frequency (one_time / repeat / loyal) with LTV and revenue."""
+    return await analytics_service.get_customer_segments(tenant.id, start, end, db)
+
+
+@router.get("/search-gaps")
+async def get_search_gaps(
+    limit: int = Query(20, ge=1, le=100),
+    start: datetime = Query(default_factory=lambda: _days_ago(30)),
+    end: datetime = Query(default_factory=_now),
+    tenant: Tenant = Depends(require_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Searches ranked by zero-result frequency — reveals catalog gaps."""
+    return await analytics_service.get_search_gaps(tenant.id, start, end, limit, db)
+
+
+@router.get("/basket")
+async def get_basket_analysis(
+    limit: int = Query(20, ge=1, le=100),
+    start: datetime = Query(default_factory=lambda: _days_ago(30)),
+    end: datetime = Query(default_factory=_now),
+    tenant: Tenant = Depends(require_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Top co-purchased product pairs with attach rates for cross-sell recommendations."""
+    return await analytics_service.get_basket_analysis(tenant.id, start, end, limit, db)
+
+
+@router.get("/selling-times")
+async def get_selling_times(
+    start: datetime = Query(default_factory=lambda: _days_ago(30)),
+    end: datetime = Query(default_factory=_now),
+    tenant: Tenant = Depends(require_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Purchase volume and revenue by hour-of-day and day-of-week."""
+    return await analytics_service.get_selling_times(tenant.id, start, end, db)
+
+
+@router.get("/traffic-sources")
+async def get_traffic_sources(
+    start: datetime = Query(default_factory=lambda: _days_ago(30)),
+    end: datetime = Query(default_factory=_now),
+    tenant: Tenant = Depends(require_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Per-product conversion rates broken down by traffic source (referrer)."""
+    return await analytics_service.get_traffic_sources(tenant.id, start, end, db)
+
+
+@router.get("/experiments")
+async def get_experiment_results(
+    start: datetime = Query(default_factory=lambda: _days_ago(30)),
+    end: datetime = Query(default_factory=_now),
+    tenant: Tenant = Depends(require_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """A/B experiment results with per-variant conversion rates and uplift vs. control."""
+    return await analytics_service.get_experiment_results(tenant.id, start, end, db)
+
+
+@router.get("/revenue")
+async def get_revenue(
+    start: datetime = Query(default_factory=lambda: _days_ago(30)),
+    end: datetime = Query(default_factory=_now),
+    tenant: Tenant = Depends(require_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Total revenue, daily breakdown, and revenue by product category."""
+    return await analytics_service.get_revenue(tenant.id, start, end, db)
+
+
+@router.get("/products")
+async def get_product_performance(
+    limit: int = Query(20, ge=1, le=100),
+    start: datetime = Query(default_factory=lambda: _days_ago(30)),
+    end: datetime = Query(default_factory=_now),
+    tenant: Tenant = Depends(require_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Per-product views, cart-adds, purchases, revenue, and conversion rates."""
+    return await analytics_service.get_product_performance(tenant.id, start, end, limit, db)
 
 
 @router.get("/retention")
