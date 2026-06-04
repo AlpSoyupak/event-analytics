@@ -24,6 +24,28 @@ def _days_ago(n: int) -> datetime:
     return _now() - timedelta(days=n)
 
 
+@router.get("/cache-status")
+async def get_cache_status(
+    start: datetime = Query(default_factory=lambda: _days_ago(7)),
+    end: datetime = Query(default_factory=_now),
+    tenant: Tenant = Depends(require_tenant),
+):
+    """Returns the remaining Redis TTL (seconds) for the summary cache key.
+
+    ttl_seconds == -2  → key does not exist (next request hits PostgreSQL)
+    ttl_seconds == -1  → key exists but has no expiry (should not happen)
+    ttl_seconds >= 0   → seconds until cached data is stale and PostgreSQL is queried
+    """
+    key = f"analytics:summary:{tenant.id}:{start.date()}:{end.date()}"
+    ttl_seconds = await cache_service.ttl(key)
+    from datetime import timezone
+    expires_at = (
+        (_now() + __import__("datetime").timedelta(seconds=ttl_seconds)).isoformat()
+        if ttl_seconds >= 0 else None
+    )
+    return {"ttl_seconds": ttl_seconds, "expires_at": expires_at, "cache_key": key}
+
+
 @router.get("/summary")
 async def get_summary(
     start: datetime = Query(default_factory=lambda: _days_ago(7)),

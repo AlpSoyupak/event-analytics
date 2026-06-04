@@ -1,0 +1,22 @@
+sequenceDiagram
+    participant Seed as Seed Script
+    participant API as FastAPI /events/batch
+    participant Auth as Auth + Rate Limit
+    participant PG as PostgreSQL
+    participant Kafka as Kafka
+    participant Consumer as Kafka Consumer
+    participant Redis as Redis PubSub
+    participant WS as Dashboard WebSocket
+
+    Seed->>API: POST /events/batch with N events
+    API->>Auth: validate X-API-Key, check rate limit
+    Auth-->>API: tenant context
+    API->>PG: INSERT events (batch upsert)
+    API->>Kafka: publish each event to events_topic
+    API-->>Seed: 201 Created, count N
+
+    Kafka->>Consumer: poll messages
+    Consumer->>PG: re-insert with source=kafka (idempotent)
+    Consumer->>Redis: PUBLISH ws:events:tenant_id with event payload
+    Redis->>WS: forward message to subscribed dashboard
+    WS-->>Dashboard: live event flash

@@ -83,6 +83,9 @@
     .tag { display: inline-block; background: #2d3148; border-radius: 4px; padding: 1px 6px; font-size: 0.72rem; color: #94a3b8; margin: 1px; }
     .section-title { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #475569; margin-bottom: 8px; }
     select option { background: #1a1d2e; color: #e2e8f0; }
+    /* Override Bootstrap 5.3 secondary color token for this dark theme */
+    :root { --bs-secondary-color: #cbd5e1; --bs-body-color: #e2e8f0; }
+    .small, small { color: inherit; }
     .table { color: #e2e8f0; }
     .table td, .table th { border-color: #2d3148; }
     .table tbody tr:hover { background: #20243a; }
@@ -96,7 +99,7 @@
     .live-feed { background:#0f1117; border-radius:8px; padding:12px; font-family:monospace; font-size:0.75rem; max-height:180px; overflow-y:auto; }
     .live-feed .ev { padding:2px 0; border-bottom:1px solid #1a1d2e; }
     .live-feed .ev-type { color:#a78bfa; font-weight:600; }
-    .live-feed .ev-meta { color:#475569; }
+    .live-feed .ev-meta { color:#94a3b8; }
     .anomaly-badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:0.7rem; font-weight:600; }
     .anomaly-spike { background:rgba(251,146,60,0.15); color:#fb923c; border:1px solid rgba(251,146,60,0.3); }
     .anomaly-drop  { background:rgba(248,113,113,0.15); color:#f87171; border:1px solid rgba(248,113,113,0.3); }
@@ -143,6 +146,22 @@
     <span class="tag" style="color:#4ade80">WebSocket streams events live</span>
   </div>
 
+  <!-- AI Ask -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <div class="d-flex gap-2 align-items-start">
+        <textarea id="ai-question" class="form-control form-control-sm" rows="2"
+          placeholder="Ask AI — e.g. What can I do to have Wireless Headphones sell more?"
+          style="font-size:0.88rem;resize:none"></textarea>
+        <button class="btn btn-primary btn-sm px-4" style="white-space:nowrap;align-self:stretch" onclick="askAI()">Ask</button>
+      </div>
+      <div id="ai-answer" class="mt-3" style="display:none">
+        <div id="ai-answer-text" class="small" style="color:#e2e8f0;line-height:1.6;white-space:pre-wrap"></div>
+        <div id="ai-tools-used" class="mt-2" style="font-size:0.7rem;color:#94a3b8"></div>
+      </div>
+    </div>
+  </div>
+
   <div class="row g-4">
 
     <!-- LEFT COLUMN: Setup + Send Events -->
@@ -171,6 +190,10 @@
           </div>
           <button id="btn-create-tenant" class="btn btn-primary btn-sm w-100" onclick="createTenant()">Create Tenant</button>
 
+          <div id="active-key-warning" class="mt-2 small" style="display:none;color:#fbbf24">
+            An active API key is loaded. Clear it first to create a new tenant.
+          </div>
+
           <div id="tenant-result" class="mt-3" style="display:none">
             <div class="section-title">Your API Key (save this!)</div>
             <div class="api-key-box" id="api-key-display"></div>
@@ -183,8 +206,28 @@
             </div>
           </div>
           <div id="saved-tenant-info" class="mt-3" style="display:none">
-            <div class="section-title">Active Tenant</div>
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <div class="section-title mb-0">Active Tenant</div>
+              <button class="btn btn-sm btn-outline-secondary" style="font-size:0.7rem;padding:2px 8px" onclick="clearActiveKey()">Clear</button>
+            </div>
             <div class="api-key-box" id="saved-key-display"></div>
+            <div class="mt-3">
+              <label class="section-title">Rename Tenant</label>
+              <div class="d-flex gap-2">
+                <input id="rename-tenant-input" type="text" class="form-control form-control-sm"
+                  placeholder="Loading…" />
+                <button class="btn btn-outline-secondary btn-sm" onclick="renameTenant()">Save</button>
+              </div>
+              <div id="rename-result" class="mt-1" style="font-size:0.75rem;display:none"></div>
+            </div>
+          </div>
+
+          <div class="mt-3">
+            <div class="section-title">Or use an existing API key</div>
+            <div class="d-flex gap-2">
+              <input id="existing-api-key" type="text" class="form-control form-control-sm" placeholder="Paste your API key here" style="font-family:monospace;font-size:0.82rem" />
+              <button class="btn btn-outline-secondary btn-sm" onclick="loadExistingKey()">Load</button>
+            </div>
           </div>
         </div>
       </div>
@@ -342,7 +385,7 @@
           <!-- Time series chart -->
           <div class="mb-4">
             <div class="section-title">Event Volume Over Time
-              <span class="ms-2 small" style="color:#475569;text-transform:none;letter-spacing:0">
+              <span class="ms-2 small" style="color:#94a3b8;text-transform:none;letter-spacing:0">
                 (Uses materialized view for daily — pre-aggregated by Celery)
               </span>
             </div>
@@ -380,7 +423,7 @@
       <!-- Anomaly Alerts -->
       <div class="card mb-4">
         <div class="card-header d-flex align-items-center justify-content-between">
-          <div>Anomaly Alerts <span class="ms-2 small" style="color:#475569;text-transform:none;letter-spacing:0">(Z-score &gt; 2.5, refreshed every 5 min by Celery)</span></div>
+          <div>Anomaly Alerts <span class="ms-2 small" style="color:#94a3b8;text-transform:none;letter-spacing:0">(Z-score &gt; 2.5, refreshed every 5 min by Celery)</span></div>
           <button class="btn btn-sm btn-outline-secondary" onclick="loadAnomalies()">↻ Check</button>
         </div>
         <div class="card-body">
@@ -393,7 +436,7 @@
       <!-- Product Performance -->
       <div class="card mb-4">
         <div class="card-header d-flex align-items-center justify-content-between">
-          <div>Product Performance <span class="ms-2 small" style="color:#475569;text-transform:none;letter-spacing:0">(views → cart → purchase conversion)</span></div>
+          <div>Product Performance <span class="ms-2 small" style="color:#94a3b8;text-transform:none;letter-spacing:0">(views → cart → purchase conversion)</span></div>
           <button class="btn btn-sm btn-outline-secondary" onclick="loadProducts()">↻ Refresh</button>
         </div>
         <div class="card-body">
@@ -406,7 +449,7 @@
       <!-- Traffic Sources -->
       <div class="card mb-4">
         <div class="card-header d-flex align-items-center justify-content-between">
-          <div>Traffic Source Conversion <span class="ms-2 small" style="color:#475569;text-transform:none;letter-spacing:0">(same product, different referrer — Level 2)</span></div>
+          <div>Traffic Source Conversion <span class="ms-2 small" style="color:#94a3b8;text-transform:none;letter-spacing:0">(same product, different referrer — Level 2)</span></div>
           <button class="btn btn-sm btn-outline-secondary" onclick="loadTrafficSources()">↻ Refresh</button>
         </div>
         <div class="card-body">
@@ -420,7 +463,7 @@
       <!-- Experiment Results -->
       <div class="card mb-4">
         <div class="card-header d-flex align-items-center justify-content-between">
-          <div>A/B Experiment Results <span class="ms-2 small" style="color:#475569;text-transform:none;letter-spacing:0">(causal evidence — Level 3)</span></div>
+          <div>A/B Experiment Results <span class="ms-2 small" style="color:#94a3b8;text-transform:none;letter-spacing:0">(causal evidence — Level 3)</span></div>
           <button class="btn btn-sm btn-outline-secondary" onclick="loadExperiments()">↻ Refresh</button>
         </div>
         <div class="card-body">
@@ -434,7 +477,7 @@
       <!-- Customer Segments -->
       <div class="card mb-4">
         <div class="card-header d-flex align-items-center justify-content-between">
-          <div>Customer Segments <span class="ms-2 small" style="color:#475569;text-transform:none;letter-spacing:0">(one-time / repeat / loyal — LTV &amp; churn signals)</span></div>
+          <div>Customer Segments <span class="ms-2 small" style="color:#94a3b8;text-transform:none;letter-spacing:0">(one-time / repeat / loyal — LTV &amp; churn signals)</span></div>
           <button class="btn btn-sm btn-outline-secondary" onclick="loadCustomers()">↻ Refresh</button>
         </div>
         <div class="card-body">
@@ -448,7 +491,7 @@
       <!-- Catalog Gaps -->
       <div class="card mb-4">
         <div class="card-header d-flex align-items-center justify-content-between">
-          <div>Catalog Gaps <span class="ms-2 small" style="color:#475569;text-transform:none;letter-spacing:0">(searches with zero results = unmet demand)</span></div>
+          <div>Catalog Gaps <span class="ms-2 small" style="color:#94a3b8;text-transform:none;letter-spacing:0">(searches with zero results = unmet demand)</span></div>
           <button class="btn btn-sm btn-outline-secondary" onclick="loadSearchGaps()">↻ Refresh</button>
         </div>
         <div class="card-body">
@@ -462,7 +505,7 @@
       <!-- Basket Analysis -->
       <div class="card mb-4">
         <div class="card-header d-flex align-items-center justify-content-between">
-          <div>Basket Analysis <span class="ms-2 small" style="color:#475569;text-transform:none;letter-spacing:0">(products bought together — cross-sell signals)</span></div>
+          <div>Basket Analysis <span class="ms-2 small" style="color:#94a3b8;text-transform:none;letter-spacing:0">(products bought together — cross-sell signals)</span></div>
           <button class="btn btn-sm btn-outline-secondary" onclick="loadBasket()">↻ Refresh</button>
         </div>
         <div class="card-body">
@@ -476,7 +519,7 @@
       <!-- Best Selling Times -->
       <div class="card mb-4">
         <div class="card-header d-flex align-items-center justify-content-between">
-          <div>Best Selling Times <span class="ms-2 small" style="color:#475569;text-transform:none;letter-spacing:0">(when to run promotions and send emails)</span></div>
+          <div>Best Selling Times <span class="ms-2 small" style="color:#94a3b8;text-transform:none;letter-spacing:0">(when to run promotions and send emails)</span></div>
           <button class="btn btn-sm btn-outline-secondary" onclick="loadSellingTimes()">↻ Refresh</button>
         </div>
         <div class="card-body">
@@ -621,6 +664,8 @@
       document.getElementById('tenant-rl').textContent = t.rate_limit_per_minute;
       document.getElementById('tenant-result').style.display = '';
       document.getElementById('saved-tenant-info').style.display = 'none';
+      _setCreateFormLocked(true);
+      document.getElementById('rename-tenant-input').value = t.name;
       log(`Tenant "${t.name}" created. API key saved.`);
       connectWebSocket();
       loadAnomalies();
@@ -635,11 +680,138 @@
     }
   }
 
+  async function fetchAndShowTenantName() {
+    try {
+      const r = await fetch(`${BASE}/api/v1/tenants/me`, { headers: headers() });
+      if (!r.ok) return;
+      const me = await r.json();
+      document.getElementById('rename-tenant-input').value = me.name;
+    } catch {}
+  }
+
+  async function renameTenant() {
+    const name = document.getElementById('rename-tenant-input').value.trim();
+    const resultEl = document.getElementById('rename-result');
+    if (!name) { return; }
+
+    resultEl.style.display = '';
+    resultEl.style.color = '#94a3b8';
+    resultEl.textContent = 'Saving…';
+
+    try {
+      // Resolve tenant_id from the active API key
+      const meRes = await fetch(`${BASE}/api/v1/tenants/me`, { headers: headers() });
+      if (!meRes.ok) throw new Error('Could not resolve tenant.');
+      const me = await meRes.json();
+
+      const r = await fetch(`${BASE}/api/v1/tenants/${me.id}`, {
+        method: 'PATCH',
+        headers: headers(),
+        body: JSON.stringify({ name }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+
+      resultEl.style.color = '#4ade80';
+      resultEl.textContent = `Renamed to "${name}"`;
+      document.getElementById('rename-tenant-input').value = name;
+    } catch (e) {
+      resultEl.style.color = '#f87171';
+      resultEl.textContent = 'Error: ' + e.message;
+    }
+  }
+
+  function _setCreateFormLocked(locked) {
+    document.getElementById('tenant-name').disabled = locked;
+    document.getElementById('tenant-plan').disabled = locked;
+    document.getElementById('btn-create-tenant').disabled = locked;
+    document.getElementById('active-key-warning').style.display = locked ? '' : 'none';
+  }
+
+  function _resetDashboard() {
+    // KPI stats
+    ['stat-total','stat-users','stat-sessions','stat-revenue'].forEach(id => {
+      document.getElementById(id).textContent = '—';
+    });
+    document.getElementById('stat-revenue').style.color = '#4ade80';
+
+    // Chart
+    if (tsChart) { tsChart.destroy(); tsChart = null; }
+
+    // All data panels
+    const EMPTY = '<div class="text-secondary small">Load analytics to see data.</div>';
+    [
+      'top-events-table', 'product-table', 'traffic-source-table',
+      'experiment-results', 'customer-segments', 'search-gaps',
+      'basket-analysis', 'selling-times',
+    ].forEach(id => { document.getElementById(id).innerHTML = EMPTY; });
+
+    document.getElementById('funnel-display').innerHTML =
+      '<div class="text-secondary small">Click "Run Funnel" after sending events</div>';
+    document.getElementById('anomaly-display').innerHTML =
+      '<div class="text-secondary small">Load analytics to trigger anomaly detection.</div>';
+    const renameResult = document.getElementById('rename-result');
+    renameResult.style.display = 'none';
+    renameResult.textContent = '';
+
+    // Live feed
+    document.getElementById('live-feed').innerHTML =
+      '<div style="color:#475569">Waiting for connection...</div>';
+    document.getElementById('live-count').textContent = '0 events received';
+    liveCount = 0;
+
+    // Event log
+    document.getElementById('event-log').innerHTML =
+      '<div class="line" style="color:#475569">Waiting for events...</div>';
+
+    // Countdown
+    clearInterval(countdownTimer);
+    const cd = document.getElementById('refresh-countdown');
+    if (cd) cd.textContent = 'next refresh at —';
+
+    // Nav status
+    document.getElementById('nav-status').innerHTML =
+      '<span class="status-dot status-loading"></span>checking...';
+    document.getElementById('ws-dot').classList.add('offline');
+    document.getElementById('ws-status').textContent = 'disconnected';
+  }
+
+  function clearActiveKey() {
+    API_KEY = '';
+    localStorage.removeItem('ea_api_key');
+    localStorage.removeItem('ea_tenant_id');
+    document.getElementById('saved-tenant-info').style.display = 'none';
+    document.getElementById('tenant-result').style.display = 'none';
+    _setCreateFormLocked(false);
+    if (ws) { ws.close(); ws = null; }
+    clearTimeout(refreshTimer);
+    _resetDashboard();
+    log('API key cleared. Create or load a tenant to continue.');
+  }
+
+  function loadExistingKey() {
+    const key = document.getElementById('existing-api-key').value.trim();
+    if (!key) { alert('Paste an API key first.'); return; }
+    API_KEY = key;
+    localStorage.setItem('ea_api_key', key);
+    document.getElementById('saved-key-display').textContent = key;
+    document.getElementById('saved-tenant-info').style.display = '';
+    document.getElementById('tenant-result').style.display = 'none';
+    document.getElementById('existing-api-key').value = '';
+    _setCreateFormLocked(true);
+    fetchAndShowTenantName();
+    log(`API key loaded. Fetching analytics…`);
+    loadAnalytics();
+    loadAnomalies();
+    connectWebSocket();
+    resetCountdown();
+  }
+
   // Show saved key on load
   if (API_KEY) {
-    const info = document.getElementById('saved-tenant-info');
     document.getElementById('saved-key-display').textContent = API_KEY;
-    info.style.display = '';
+    document.getElementById('saved-tenant-info').style.display = '';
+    _setCreateFormLocked(true);
+    fetchAndShowTenantName();
   }
 
   // ── Send Events ───────────────────────────────────────────────────────────
@@ -727,6 +899,7 @@
       loadProducts(), loadTrafficSources(), loadExperiments(),
       loadCustomers(), loadSearchGaps(), loadBasket(), loadSellingTimes(),
     ]);
+    syncCountdownFromRedis();
   }
 
   async function loadSummary() {
@@ -818,8 +991,8 @@
       const html = data.map(e => `
         <div class="mb-2">
           <div class="d-flex justify-content-between mb-1">
-            <span class="small">${e.event_type}</span>
-            <span class="small text-secondary">${fmt(e.count)} events · ${fmt(e.unique_users)} users</span>
+            <span style="font-size:0.875rem;color:#f1f5f9">${e.event_type}</span>
+            <span style="font-size:0.875rem;color:#cbd5e1">${fmt(e.count)} events · ${fmt(e.unique_users)} users</span>
           </div>
           <div class="progress">
             <div class="progress-bar" style="width:${Math.round(e.count / max * 100)}%"></div>
@@ -1245,7 +1418,7 @@
         <div class="anomaly-row">
           <span class="anomaly-badge ${a.kind === 'spike' ? 'anomaly-spike' : 'anomaly-drop'}">${a.kind}</span>
           <span>${a.description}</span>
-          <span class="ms-auto ev-meta small">z=${a.z_score}</span>
+          <span class="ms-auto small" style="color:#cbd5e1">z=${a.z_score}</span>
         </div>
       `).join('');
     } catch {}
@@ -1304,30 +1477,95 @@
 
   // ── Refresh Countdown ────────────────────────────────────────────────────
   let countdownTimer = null;
-  let countdownSec = 60;
+  let refreshTimer   = null;
+  let countdownSec   = 0;
 
-  function startCountdown() {
-    countdownSec = 60;
+  async function syncCountdownFromRedis() {
+    if (!API_KEY) return;
+    const { start, end } = dateRange();
+    try {
+      const r = await fetch(`${BASE}/api/v1/analytics/cache-status?start=${start}&end=${end}`, { headers: headers() });
+      if (!r.ok) return;
+      const { ttl_seconds } = await r.json();
+      const secs = ttl_seconds >= 0 ? ttl_seconds : 0;
+      startCountdown(secs);
+      // Schedule the real auto-refresh to fire exactly when the cache expires
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => loadAnalytics(), secs * 1000);
+    } catch {}
+  }
+
+  function startCountdown(seconds = 60) {
+    clearInterval(countdownTimer);
+    countdownSec = seconds;
+    const nextRefreshAt = new Date(Date.now() + seconds * 1000);
+    const timeStr = nextRefreshAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const el = document.getElementById('refresh-countdown');
+    if (el) el.textContent = seconds > 0
+      ? `cache refreshes at ${timeStr} (in ${seconds}s)`
+      : `cache expired — next request is live`;
     countdownTimer = setInterval(() => {
       countdownSec--;
       const el = document.getElementById('refresh-countdown');
-      if (el) el.textContent = `next refresh in ${countdownSec}s`;
+      if (el) el.textContent = countdownSec > 0
+        ? `cache refreshes at ${timeStr} (in ${countdownSec}s)`
+        : `cache expired — next request is live`;
       if (countdownSec <= 0) clearInterval(countdownTimer);
     }, 1000);
   }
 
   function resetCountdown() {
-    clearInterval(countdownTimer);
-    startCountdown();
+    clearTimeout(refreshTimer);
+    syncCountdownFromRedis();
   }
+
+  // ── AI Ask ───────────────────────────────────────────────────────────────
+  async function askAI() {
+    if (!API_KEY) { alert('Load a tenant API key first.'); return; }
+    const question = document.getElementById('ai-question').value.trim();
+    if (!question) return;
+
+    const btn = document.querySelector('[onclick="askAI()"]');
+    const answerBox  = document.getElementById('ai-answer');
+    const answerText = document.getElementById('ai-answer-text');
+    const toolsUsed  = document.getElementById('ai-tools-used');
+
+    btn.disabled = true;
+    btn.textContent = '…';
+    answerBox.style.display = '';
+    answerText.textContent = 'Thinking…';
+    toolsUsed.textContent = '';
+
+    try {
+      const r = await fetch(`${BASE}/api/v1/ai/langchain/ask`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ question }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail || JSON.stringify(data));
+      answerText.textContent = data.answer;
+      if (data.meta?.tools_used?.length) {
+        toolsUsed.textContent = 'Tools used: ' + data.meta.tools_used.join(', ');
+      }
+    } catch (e) {
+      answerText.style.color = '#f87171';
+      answerText.textContent = 'Error: ' + e.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Ask';
+    }
+  }
+
+  document.getElementById('ai-question').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); askAI(); }
+  });
 
   // ── Init ──────────────────────────────────────────────────────────────────
   checkHealth();
   setInterval(checkHealth, 15_000);
   if (API_KEY) {
     loadAnalytics();
-    setInterval(() => { loadAnalytics(); resetCountdown(); }, 60_000);
-    startCountdown();
     loadAnomalies();
     connectWebSocket();
     // Pre-fill replay dates to last 24 hours

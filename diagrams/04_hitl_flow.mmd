@@ -1,0 +1,16 @@
+sequenceDiagram
+    participant Dev as Developer
+    participant API as FastAPI
+    participant Redis as Redis
+
+    Dev->>API: POST /ai/plan with question
+    API->>Redis: SET ai:plan:uuid with plan + question + tenant_id, TTL 5 min
+    API-->>Dev: plan_id + full plan + next_step URL
+
+    Note over Dev: Review plan - inspect tools, args, reasoning
+
+    Dev->>API: POST /ai/execute/plan_id
+    API->>Redis: GET ai:plan:plan_id
+    API->>Redis: DEL ai:plan:plan_id (single-use)
+    API->>API: run Analyst + Critic pipeline with approved plan
+    API-->>Dev: answer + meta

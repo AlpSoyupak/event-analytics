@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.dependencies.rate_limit import require_tenant
+from app.models.tenant import Tenant
 from app.schemas.tenant import TenantCreate, TenantResponse, TenantUpdate
 from app.services.tenant_service import tenant_service
 
@@ -17,6 +19,12 @@ async def create_tenant(
 ):
     """Provision a new tenant. Returns the API key — store it securely, it is shown only once."""
     tenant = await tenant_service.create(payload, db)
+    return tenant
+
+
+@router.get("/me", response_model=TenantResponse)
+async def get_current_tenant(tenant: Tenant = Depends(require_tenant)):
+    """Return the tenant associated with the provided API key."""
     return tenant
 
 

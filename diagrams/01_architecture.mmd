@@ -1,0 +1,61 @@
+graph TB
+    subgraph Client
+        SDK[Client SDK or curl]
+        WS[WebSocket Client]
+        UI[Dashboard UI]
+    end
+
+    subgraph API["FastAPI port 8000"]
+        Events["Router: /api/v1/events"]
+        Analytics["Router: /api/v1/analytics"]
+        AIRouter["Router: /api/v1/ai"]
+        WSRouter["Router: /api/v1/ws/events"]
+    end
+
+    subgraph Infra
+        Kafka[(Kafka)]
+        PG[(PostgreSQL + Materialized Views)]
+        Redis[(Redis - Cache + PubSub)]
+    end
+
+    subgraph Workers
+        KafkaConsumer[Kafka Consumer]
+        CeleryWorker[Celery Worker - anomaly + refresh + precompute]
+        CeleryBeat[Celery Beat Scheduler]
+        Flower[Flower port 5555]
+    end
+
+    subgraph AI_Pipeline["AI Pipeline"]
+        Planner[Planner Agent - RAG-grounded]
+        Analyst[Analyst Agent - tool loop]
+        Critic[Critic Agent - review and revise]
+        LCFallback[LangChain Fallback Agent]
+        BM25[BM25 RAG Index - app/ source files]
+        FAISS[FAISS Vector Index - all-MiniLM-L6-v2]
+    end
+
+    SDK -->|POST /events/batch| Events
+    Events -->|publish| Kafka
+    Kafka --> KafkaConsumer
+    KafkaConsumer -->|INSERT| PG
+    KafkaConsumer -->|PUBLISH ws:events:tid| Redis
+
+    Analytics -->|query| PG
+    Analytics -->|cache get/set| Redis
+    AIRouter --> Planner
+    Planner -->|retrieve top-k chunks| BM25
+    Planner --> Analyst
+    Analyst -->|analytics tool calls| PG
+    Analyst --> Critic
+    Critic -->|fallback if rejected| LCFallback
+    LCFallback -->|retrieve| FAISS
+
+    CeleryBeat -->|trigger| CeleryWorker
+    CeleryWorker -->|REFRESH MATERIALIZED VIEW| PG
+    CeleryWorker -->|z-score anomalies| Redis
+
+    WSRouter -->|SUBSCRIBE ws:events:tid| Redis
+    WS <-->|live events| WSRouter
+    UI -->|WebSocket| WSRouter
+    UI -->|REST| Analytics
+    UI -->|REST| AIRouter

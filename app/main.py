@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 import structlog
@@ -13,6 +14,7 @@ from app.routers import ai, analytics, events, tenants, websocket
 from app.services.cache_service import cache_service
 from app.services.event_service import close_kafka_producer, get_kafka_producer
 from app.services.rag_service import rag_service
+from app.services.vector_rag_service import vector_rag_service
 
 settings = get_settings()
 logger = structlog.get_logger()
@@ -33,6 +35,8 @@ async def lifespan(app: FastAPI):
     logger.info("startup", environment=settings.environment)
     chunk_count = rag_service.build_index("app")
     logger.info("rag_index_built", chunks=chunk_count)
+    vec_count = await asyncio.to_thread(vector_rag_service.build_index, "app")
+    logger.info("vector_rag_index_built", chunks=vec_count)
     try:
         await get_kafka_producer()
     except Exception:

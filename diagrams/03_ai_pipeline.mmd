@@ -1,0 +1,36 @@
+sequenceDiagram
+    participant User
+    participant API as POST /ai/ask
+    participant Planner as Planner Agent
+    participant BM25 as BM25 RAG Index
+    participant FAISS as FAISS Vector Index
+    participant Analyst as Analyst Agent
+    participant DB as PostgreSQL
+    participant Critic as Critic Agent
+    participant LangChain as LangChain Fallback
+
+    User->>API: question - Which A/B variant won for Smart Watch?
+    API->>Planner: forward question
+    Planner->>BM25: retrieve top-k code chunks
+    BM25-->>Planner: relevant source snippets - models, schemas, service fns
+    Planner-->>API: plan with steps get_experiments + get_timeseries
+
+    API->>Analyst: question + plan
+    loop tool loop
+        Analyst->>DB: get_experiment_results
+        DB-->>Analyst: control 12%, treatment 34%, uplift +183%
+        Analyst->>DB: get_timeseries
+        DB-->>Analyst: daily counts
+    end
+    Analyst-->>API: draft_answer
+
+    API->>Critic: draft_answer + original question
+    Critic-->>API: approved with final_answer
+
+    alt Critic rejects draft
+        API->>LangChain: question - LCEL agent with 5 structured tools
+        LangChain->>FAISS: semantic similarity retrieve
+        LangChain-->>API: fallback answer
+    end
+
+    API-->>User: answer + plan + meta with tools_used and workflow_trace

@@ -13,11 +13,12 @@ from langchain_core.messages import SystemMessage, ToolMessage
 from langchain_core.tools import StructuredTool
 from langchain_groq import ChatGroq
 from langgraph.prebuilt import create_react_agent
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.services.analytics_service import analytics_service
+from app.services.vector_rag_service import vector_rag_service
 
 settings = get_settings()
 
@@ -85,7 +86,13 @@ This is the only place in the data where you can make causal claims ("doing X ca
 
 ## Causal vs. correlational claims
 Only cite causal claims ("doing X caused Y% more sales") when using get_experiment_results.
-All other tools are correlational — describe them as patterns, not causes."""
+All other tools are correlational — describe them as patterns, not causes.
+
+## When NOT to call tools
+If the question is about how the codebase works, how a feature is implemented, what
+algorithm or threshold is used, or anything that can be answered from the provided
+codebase context — answer directly from that context. Do NOT call any analytics tools
+for implementation or architecture questions."""
 
 
 def _dt(s: str) -> datetime:
@@ -115,6 +122,11 @@ class _TopEventsIn(BaseModel):
     end: str = Field(description="ISO 8601 end datetime")
     limit: int = Field(default=10, description="Number of top events to return (1–100)")
 
+    @field_validator("limit", mode="before")
+    @classmethod
+    def _coerce_limit(cls, v: object) -> int:
+        return int(v)
+
 
 class _FunnelIn(BaseModel):
     steps: list[str] = Field(
@@ -141,6 +153,11 @@ class _ProductsIn(BaseModel):
     end: str = Field(description="ISO 8601 end datetime")
     limit: int = Field(default=20, description="Max number of products to return (1–100)")
 
+    @field_validator("limit", mode="before")
+    @classmethod
+    def _coerce_limit(cls, v: object) -> int:
+        return int(v)
+
 
 class _TrafficSourcesIn(BaseModel):
     start: str = Field(description="ISO 8601 start datetime")
@@ -162,11 +179,21 @@ class _SearchGapsIn(BaseModel):
     end: str = Field(description="ISO 8601 end datetime")
     limit: int = Field(default=20, description="Max queries to return")
 
+    @field_validator("limit", mode="before")
+    @classmethod
+    def _coerce_limit(cls, v: object) -> int:
+        return int(v)
+
 
 class _BasketIn(BaseModel):
     start: str = Field(description="ISO 8601 start datetime")
     end: str = Field(description="ISO 8601 end datetime")
     limit: int = Field(default=20, description="Max product pairs to return")
+
+    @field_validator("limit", mode="before")
+    @classmethod
+    def _coerce_limit(cls, v: object) -> int:
+        return int(v)
 
 
 class _SellingTimesIn(BaseModel):
@@ -340,24 +367,36 @@ class LangChainAnalyticsAgent:
             model=settings.groq_model,
         )
 
+        rag_context = vector_rag_service.retrieve(question, top_k=3)
+        human_content = question
+        if rag_context:
+            human_content += f"\n\nRelevant codebase context (semantic search):\n{rag_context}"
+
         graph = create_react_agent(
             llm,
             tools,
             prompt=SystemMessage(content=_SYSTEM.format(today=today)),
         )
 
-        result = await graph.ainvoke({
-            "messages": [{"role": "human", "content": question}]
-        })
+        try:
+            result = await graph.ainvoke({
+                "messages": [{"role": "human", "content": human_content}]
+            })
+        except Exception:
+            # Groq occasionally generates malformed tool calls (tool_use_failed).
+            # Fall back to a plain LLM call with no tools — RAG context is already
+            # in the message so codebase questions still get a good answer.
+            from langchain_core.messages import HumanMessage
+            fallback_result = await llm.ainvoke([
+                SystemMessage(content=_SYSTEM.format(today=today)),
+                HumanMessage(content=human_content),
+            ])
+            return fallback_result.content, []
 
-        # Final AI message is always last
         answer = result["messages"][-1].content
-
-        # ToolMessages carry the name of the tool that was called
         tools_used = [
             msg.name
             for msg in result["messages"]
             if isinstance(msg, ToolMessage)
         ]
-
         return answer, tools_used

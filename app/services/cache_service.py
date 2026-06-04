@@ -44,6 +44,14 @@ class CacheService:
         except Exception:
             pass
 
+    async def ttl(self, key: str) -> int:
+        """Return remaining TTL in seconds for *key*. -2 = not found, -1 = no expiry."""
+        try:
+            r = await self.client()
+            return await r.ttl(key)
+        except Exception:
+            return -2
+
     async def delete_pattern(self, pattern: str) -> None:
         try:
             r = await self.client()
