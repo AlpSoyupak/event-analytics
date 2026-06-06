@@ -35,8 +35,11 @@ async def lifespan(app: FastAPI):
     logger.info("startup", environment=settings.environment)
     chunk_count = rag_service.build_index("app")
     logger.info("rag_index_built", chunks=chunk_count)
-    vec_count = await asyncio.to_thread(vector_rag_service.build_index, "app")
-    logger.info("vector_rag_index_built", chunks=vec_count)
+    try:
+        vec_count = await asyncio.to_thread(vector_rag_service.build_index, "app")
+        logger.info("vector_rag_index_built", chunks=vec_count)
+    except ImportError:
+        logger.warning("vector_rag_unavailable", detail="Optional vector RAG deps not installed; semantic search disabled")
     try:
         await get_kafka_producer()
     except Exception:
